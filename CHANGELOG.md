@@ -2,6 +2,18 @@
 
 # Changelog
 
+## [3.7.0](https://github.com/cagedbird043/zashboard/compare/v3.6.0...v3.7.0) (2026-05-17)
+
+
+### Features
+
+* refine tailnet dashboard ([95b698f](https://github.com/cagedbird043/zashboard/commit/95b698f16d7fa735a589ed5c7251151afb29b910))
+
+
+### Bug Fixes
+
+* improve tailnet badge contrast ([57a6c81](https://github.com/cagedbird043/zashboard/commit/57a6c8117af500e77fc93a70e1a1498be0b37eb0))
+
 ## [3.6.0](https://github.com/cagedbird043/zashboard/compare/v3.5.1...v3.6.0) (2026-05-17)
 
 
