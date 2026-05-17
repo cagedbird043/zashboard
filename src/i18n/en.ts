@@ -356,6 +356,12 @@ const en = {
   ruleMissCount: 'Miss: {count} times',
   ruleLastMiss: 'Last miss: {time}',
   tailnetDescription: 'Inspect sing-box embedded Tailscale endpoints and peers.',
+  tailnetUnavailableDescription:
+    'The backend does not expose the Tailnet API, or no Tailscale endpoint is configured.',
+  endpoints: 'Endpoints',
+  running: 'Running',
+  loading: 'Loading',
+  local: 'Local',
   complete: 'Complete',
   partial: 'Partial',
   lastUpdated: 'Last updated',

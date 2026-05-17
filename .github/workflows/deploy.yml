@@ -35,9 +35,10 @@ jobs:
       - uses: actions/setup-node@v6
       - uses: pnpm/action-setup@v6
 
-      - name: Install and Build 🔧
+      - name: Install, Test and Build 🔧
         run: |
           pnpm i
+          pnpm run test
           pnpm run build
 
       - name: Deploy 🚀

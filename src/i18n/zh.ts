@@ -349,6 +349,12 @@ const zh: LANG_MESSAGE = {
   ruleMissCount: '未命中: {count} 次',
   ruleLastMiss: '最后未命中: {time}',
   tailnetDescription: '查看 sing-box 内置 Tailscale 端点和设备。',
+  tailnetUnavailableDescription:
+    '当前后端没有暴露 Tailnet API，或配置中没有可用的 Tailscale endpoint。',
+  endpoints: '端点',
+  running: '运行中',
+  loading: '加载中',
+  local: '本地',
   complete: '完整',
   partial: '部分',
   lastUpdated: '最后刷新',

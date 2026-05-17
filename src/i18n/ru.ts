@@ -358,6 +358,12 @@ const ru: LANG_MESSAGE = {
   ruleMissCount: 'Промах: {count} раз',
   ruleLastMiss: 'Последний промах: {time}',
   tailnetDescription: 'Просмотр встроенных Tailscale endpoint и peers в sing-box.',
+  tailnetUnavailableDescription:
+    'Backend не предоставляет Tailnet API, или Tailscale endpoint не настроен.',
+  endpoints: 'Endpoints',
+  running: 'Running',
+  loading: 'Loading',
+  local: 'Local',
   complete: 'Полный',
   partial: 'Частичный',
   lastUpdated: 'Обновлено',
