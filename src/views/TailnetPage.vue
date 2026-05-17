@@ -13,8 +13,8 @@
           <div class="flex-1"></div>
           <span
             v-if="status"
-            class="badge"
-            :class="status.complete ? 'badge-success' : 'badge-warning'"
+            class="badge border"
+            :class="status.complete ? statusToneClass('success') : statusToneClass('warning')"
           >
             {{ status.complete ? $t('complete') : $t('partial') }}
           </span>
@@ -61,7 +61,7 @@
             <div class="flex flex-wrap items-center gap-2">
               <h2 class="text-lg font-semibold">{{ endpoint.endpointTag }}</h2>
               <span
-                class="badge badge-sm"
+                class="badge badge-sm border"
                 :class="backendStateClass(endpoint.backendState)"
               >
                 {{ endpoint.backendState || $t('unknown') }}
@@ -111,7 +111,10 @@
           <div class="mb-2 flex flex-wrap items-center gap-2">
             <h3 class="font-medium">{{ $t('peers') }}</h3>
             <span class="badge badge-sm">{{ flattenPeers(endpoint).length }}</span>
-            <span class="badge badge-success badge-sm">
+            <span
+              class="badge badge-sm border"
+              :class="statusToneClass('success')"
+            >
               {{ $t('online') }} {{ onlinePeerCount(endpoint) }}
             </span>
           </div>
@@ -194,16 +197,31 @@ const trimDNSName = (name?: string) => {
   return name?.replace(/\.$/, '') || ''
 }
 
+const statusToneClass = (tone: 'success' | 'warning' | 'neutral') => {
+  switch (tone) {
+    case 'success':
+      return 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+    case 'warning':
+      return 'border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300'
+    default:
+      return 'border-base-300 bg-base-200 text-base-content/80'
+  }
+}
+
 const backendStateClass = (state?: string) => {
   switch (state) {
     case 'Running':
-      return 'badge-success'
+      return statusToneClass('success')
     case 'NeedsLogin':
     case 'NoState':
-      return 'badge-warning'
+      return statusToneClass('warning')
     default:
-      return 'badge-neutral'
+      return statusToneClass('neutral')
   }
+}
+
+const peerStateClass = (peer: TailscalePeer) => {
+  return peer.online || peer.active ? statusToneClass('success') : statusToneClass('neutral')
 }
 
 const fetchStatus = async () => {
@@ -324,10 +342,7 @@ const PeerCard = defineComponent({
               h(
                 'span',
                 {
-                  class: [
-                    'badge badge-sm',
-                    props.peer.online || props.peer.active ? 'badge-success' : 'badge-ghost',
-                  ],
+                  class: ['badge badge-sm border', peerStateClass(props.peer)],
                 },
                 props.peer.online || props.peer.active ? t('online') : t('offline'),
               ),
