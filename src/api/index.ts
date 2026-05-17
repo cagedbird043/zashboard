@@ -13,6 +13,9 @@ import type {
   ProxyProvider,
   Rule,
   RuleProvider,
+  TailscalePingRequest,
+  TailscalePingResponse,
+  TailscaleStatusResponse,
 } from '@/types'
 import axios, { AxiosError } from 'axios'
 import { debounce } from 'lodash'
@@ -252,6 +255,14 @@ export const queryDNSAPI = (params: { name: string; type: string }) => {
   return axios.get<DNSQuery>('/dns/query', {
     params,
   })
+}
+
+export const fetchTailscaleStatusAPI = () => {
+  return axios.get<TailscaleStatusResponse>('/tailscale/status')
+}
+
+export const startTailscalePingAPI = (data: TailscalePingRequest) => {
+  return axios.post<TailscalePingResponse>('/tailscale/ping', data)
 }
 
 export const getStorageAPI = () => {

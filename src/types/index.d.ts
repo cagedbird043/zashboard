@@ -101,6 +101,59 @@ export type RuleProvider = {
   vehicleType: string
 }
 
+export type TailscalePeer = {
+  hostName?: string
+  dnsName?: string
+  os?: string
+  tailscaleIPs?: string[]
+  online: boolean
+  exitNode: boolean
+  exitNodeOption: boolean
+  active: boolean
+  rxBytes?: number
+  txBytes?: number
+  userID?: number
+  keyExpiry?: number
+}
+
+export type TailscaleUserGroup = {
+  userID: number
+  loginName?: string
+  displayName?: string
+  profilePicURL?: string
+  peers?: TailscalePeer[]
+}
+
+export type TailscaleEndpointStatus = {
+  endpointTag: string
+  backendState: string
+  authURL?: string
+  networkName?: string
+  magicDNSSuffix?: string
+  selfIP?: string
+  self?: TailscalePeer
+  userGroups?: TailscaleUserGroup[]
+}
+
+export type TailscaleStatusResponse = {
+  endpoints: TailscaleEndpointStatus[]
+  complete: boolean
+}
+
+export type TailscalePingRequest = {
+  endpointTag?: string
+  peerIP: string
+}
+
+export type TailscalePingResponse = {
+  latencyMs: number
+  isDirect: boolean
+  endpoint?: string
+  derpRegionID?: number
+  derpRegionCode?: string
+  error?: string
+}
+
 export type ConnectionRawMessage = {
   id: string
   download: number

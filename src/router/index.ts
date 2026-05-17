@@ -11,6 +11,7 @@ import ProxiesPage from '@/views/ProxiesPage.vue'
 import RulesPage from '@/views/RulesPage.vue'
 import SettingsPage from '@/views/SettingsPage.vue'
 import SetupPage from '@/views/SetupPage.vue'
+import TailnetPage from '@/views/TailnetPage.vue'
 import { useTitle } from '@vueuse/core'
 import { watch } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
@@ -25,6 +26,11 @@ const childrenRouter = [
     path: 'overview',
     name: ROUTE_NAME.overview,
     component: OverviewPage,
+  },
+  {
+    path: 'tailnet',
+    name: ROUTE_NAME.tailnet,
+    component: TailnetPage,
   },
   {
     path: 'connections',

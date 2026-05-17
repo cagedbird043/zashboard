@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  packages: write
 
 jobs:
   release-please:
@@ -21,7 +22,7 @@ jobs:
         id: release
         uses: googleapis/release-please-action@v5
         with:
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           release-type: node
           target-branch: main
 
@@ -37,12 +38,11 @@ jobs:
         run: |
           pnpm i
           pnpm run build
-          echo 'board.zash.run.place' > ./dist/CNAME
 
       - name: Deploy 🚀
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
 
   build-and-deploy-cdn-fonts:
@@ -57,12 +57,11 @@ jobs:
         run: |
           pnpm i
           pnpm run build:cdn-fonts
-          echo 'board.zash.run.place' > ./dist/CNAME
 
       - name: Deploy to gh-pages-cdn-fonts 🚀
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages-cdn-fonts
 
@@ -78,12 +77,11 @@ jobs:
         run: |
           pnpm i
           pnpm run build:firasans-only
-          echo 'board.zash.run.place' > ./dist/CNAME
 
       - name: Deploy to gh-pages-firasans-only 🚀
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages-firasans-only
 
@@ -99,12 +97,11 @@ jobs:
         run: |
           pnpm i
           pnpm run build:misans-only
-          echo 'board.zash.run.place' > ./dist/CNAME
 
       - name: Deploy to gh-pages-misans-only 🚀
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages-misans-only
 
@@ -120,12 +117,11 @@ jobs:
         run: |
           pnpm i
           pnpm run build:pingfang-only
-          echo 'board.zash.run.place' > ./dist/CNAME
 
       - name: Deploy to gh-pages-pingfang-only 🚀
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages-pingfang-only
 
@@ -141,12 +137,11 @@ jobs:
         run: |
           pnpm i
           pnpm run build:sarasa-only
-          echo 'board.zash.run.place' > ./dist/CNAME
 
       - name: Deploy to gh-pages-sarasa-only 🚀
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages-sarasa-only
 
@@ -162,12 +157,11 @@ jobs:
         run: |
           pnpm i
           pnpm run build:no-fonts
-          echo 'board.zash.run.place' > ./dist/CNAME
 
       - name: Deploy to gh-pages-no-fonts 🚀
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages-no-fonts
 
@@ -226,7 +220,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: build and publish ghcr.io docker image
         uses: docker/build-push-action@v7
@@ -237,7 +231,7 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           tags: |
-            ghcr.io/zephyruso/zashboard:latest
-            ghcr.io/zephyruso/zashboard:${{ needs.release-please.outputs.tag_name }}
+            ghcr.io/${{ github.repository_owner }}/zashboard:latest
+            ghcr.io/${{ github.repository_owner }}/zashboard:${{ needs.release-please.outputs.tag_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
