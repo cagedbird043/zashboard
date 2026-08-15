@@ -5,9 +5,10 @@ const en = {
   proxies: 'Proxies',
   tailnet: 'Tailnet',
   rules: 'Rules',
+  config: 'Config Manager',
+  configManager: 'Config Manager',
   connections: 'Connections',
   logs: 'Logs',
-
   // Shared labels and actions
   protocol: 'Protocol',
   host: 'Host',

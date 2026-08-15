@@ -3,6 +3,7 @@ import { renderRoutes } from '@/helper'
 import { i18n } from '@/i18n'
 import { language } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
+import ConfigPage from '@/views/ConfigPage.vue'
 import ConnectionsPage from '@/views/ConnectionsPage.vue'
 import HomePage from '@/views/HomePage.vue'
 import LogsPage from '@/views/LogsPage.vue'
@@ -46,6 +47,11 @@ const childrenRouter = [
     path: 'rules',
     name: ROUTE_NAME.rules,
     component: RulesPage,
+  },
+  {
+    path: 'config',
+    name: ROUTE_NAME.config,
+    component: ConfigPage,
   },
   {
     path: 'settings',

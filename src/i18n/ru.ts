@@ -7,9 +7,10 @@ const ru: LANG_MESSAGE = {
   proxies: 'Прокси',
   tailnet: 'Tailnet',
   rules: 'Правила',
+  config: 'Управление конфигурацией',
+  configManager: 'Управление конфигурацией',
   connections: 'Подключения',
   logs: 'Журнал',
-
   // Shared labels and actions
   protocol: 'Протокол',
   host: 'Хост',

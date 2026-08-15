@@ -7,9 +7,10 @@ const zh: LANG_MESSAGE = {
   proxies: '代理',
   tailnet: 'Tailnet',
   rules: '规则',
+  config: '配置管理',
+  configManager: '配置管理',
   connections: '连接',
   logs: '日志',
-
   // Shared labels and actions
   protocol: '协议',
   host: '主机',

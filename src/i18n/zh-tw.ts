@@ -7,9 +7,10 @@ const zhTW: LANG_MESSAGE = {
   proxies: '代理',
   tailnet: 'Tailnet',
   rules: '規則',
+  config: '配置管理',
+  configManager: '配置管理',
   connections: '連接',
   logs: '日誌',
-
   // Shared labels and actions
   protocol: '協議',
   host: '主機',

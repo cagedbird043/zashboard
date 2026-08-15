@@ -29,10 +29,9 @@ import { useStorage } from '@vueuse/core'
 import { computed } from 'vue'
 
 const migrateLegacyStorageKey = (legacyKey: string, nextKey: string) => {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     return
   }
-
   const legacyValue = localStorage.getItem(legacyKey)
   const nextValue = localStorage.getItem(nextKey)
 
@@ -50,10 +49,9 @@ migrateLegacyStorageKey('config/collapse-group-map', 'cache/collapse-group-map')
 migrateLegacyStorageKey('config/log-search-history', 'cache/log-search-history')
 
 const migrateLegacyConnectionDisplayStyle = () => {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     return
   }
-
   const nextKey = 'config/connection-display-style'
   const nextValue = localStorage.getItem(nextKey)
   const legacyKey = 'config/use-connection-card'
