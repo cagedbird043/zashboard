@@ -2,7 +2,13 @@
 // 与 clash 的「拉取式」不同,这里是「流驱动」:订阅 SubscribeGroups / SubscribeOutbounds,
 // 每次推送直接重建门面 index.ts 的共享状态,因此选择/测速后无需手动刷新,
 // 结果会随流自动回填到 UI。
-import { getSingboxClient } from '@/api/singbox/client'
+import { getSingboxClient, type SingboxClient } from '@/api/singbox/client'
+import {
+  healthCheckProviderAPI,
+  listProvidersAPI,
+  refreshProviderAPI,
+  subscribeProviderService,
+} from '@/api/singbox/providers'
 import type { StreamHandle } from '@/api/singbox/streams'
 import { subscribeStream } from '@/api/singbox/subscriptions'
 import { disconnectByIdAPI } from '@/assembly/connections'
@@ -13,6 +19,11 @@ import { automaticDisconnection, iconReflectList, speedtestTimeout } from '@/sto
 import { activeBackend } from '@/store/setup'
 import type { Proxy } from '@/types'
 import { proxyGroupList, proxyMap, proxyProviederList } from './index'
+import {
+  mergeProviderProxyNodes,
+  ProviderSnapshotState,
+  waitForCommittedProviderRevision,
+} from './providerState'
 
 const getHistoryFromItem = (item: GroupItem): Proxy['history'] =>
   item.urlTestDelay > 0
@@ -35,9 +46,11 @@ const nodeToProxy = (item: GroupItem): Proxy => {
   }
 }
 
+const providerState = new ProviderSnapshotState()
 let groups = new Map<string, Group>()
 let outbounds = new Map<string, GroupItem>()
 let handles: StreamHandle[] = []
+let sessionClient: SingboxClient | null = null
 let sessionKey = ''
 let ready: Promise<void> | null = null
 
@@ -91,21 +104,21 @@ const waitForURLTestResult = (timeout: number) => {
 
 // 由流数据原生组装共享状态(无 clash 的 provider / GLOBAL / 排序等概念)。
 const rebuild = () => {
-  const proxies: Record<string, Proxy> = {}
+  const startedProxies: Record<string, Proxy> = {}
 
   // 1) 出站叶子节点(含延迟)
   for (const item of outbounds.values()) {
-    proxies[item.tag] = nodeToProxy(item)
+    startedProxies[item.tag] = nodeToProxy(item)
   }
   // 2) 用组内 items 补建缺失的叶子节点(outbounds 流可能晚到或不含某些成员)
   for (const group of groups.values()) {
     for (const item of group.items) {
-      if (!proxies[item.tag]) proxies[item.tag] = nodeToProxy(item)
+      if (!startedProxies[item.tag]) startedProxies[item.tag] = nodeToProxy(item)
     }
   }
   // 3) 分组条目(携带 all / now),始终覆盖同名节点
   for (const group of groups.values()) {
-    proxies[group.tag] = {
+    startedProxies[group.tag] = {
       name: group.tag,
       type: group.type,
       now: group.selected,
@@ -119,12 +132,13 @@ const rebuild = () => {
   // 4) 把组内 items 的延迟回填到叶子节点(绝不动带 all 的组条目)
   for (const group of groups.values()) {
     for (const item of group.items) {
-      const node = proxies[item.tag]
+      const node = startedProxies[item.tag]
       if (node && !node.all?.length && item.urlTestDelay > 0) {
         node.history = getHistoryFromItem(item)
       }
     }
   }
+  const proxies = mergeProviderProxyNodes(providerState.nodes, startedProxies)
   // 5) 应用用户配置的「名称→图标」映射(与 clash 一致,sing-box 流不含图标)
   for (const iconReflect of iconReflectList.value) {
     const node = proxies[iconReflect.name]
@@ -135,7 +149,7 @@ const rebuild = () => {
   proxyGroupList.value = Array.from(groups.values())
     .filter((g) => g.items.length)
     .map((g) => g.tag)
-  proxyProviederList.value = []
+  proxyProviederList.value = providerState.providers
 }
 
 const closeStreams = () => {
@@ -143,6 +157,7 @@ const closeStreams = () => {
   handles = []
   rejectURLTestWaiters(new Error('sing-box proxy stream closed'))
   sessionKey = ''
+  sessionClient = null
   ready = null
 }
 
@@ -150,18 +165,22 @@ const stop = () => {
   closeStreams()
   groups = new Map()
   outbounds = new Map()
+  providerState.reset()
+  rebuild()
 }
 
 const ensureSession = () => {
   const backend = activeBackend.value
-  const client = getSingboxClient()?.client
+  const singboxClient = getSingboxClient()
+  const client = singboxClient?.client
   if (!backend || backend.type !== 'singbox' || !client) {
     stop()
     return
   }
-  if (sessionKey === backend.uuid && handles.length) return
+  if (sessionKey === backend.uuid && sessionClient === singboxClient && handles.length) return
 
   stop()
+  sessionClient = singboxClient
   sessionKey = backend.uuid
 
   let resolveReady!: () => void
@@ -186,6 +205,16 @@ const ensureSession = () => {
       for (const o of msg.outbounds) outbounds.set(o.tag, o)
       rebuild()
     }),
+    subscribeProviderService({
+      onInfo: (info) => providerState.setServiceInfo(info),
+      onSnapshot: (snapshot) => {
+        if (providerState.apply(snapshot)) rebuild()
+      },
+      onUnsupported: () => {
+        providerState.reset()
+        rebuild()
+      },
+    }),
   ]
 }
 
@@ -196,6 +225,26 @@ export const fetchProxies = async () => {
   ensureSession()
   if (ready) await ready
   rebuild()
+}
+
+const waitForProviderAction = async (result: { instanceId: string; revision: bigint }) => {
+  await waitForCommittedProviderRevision(
+    providerState,
+    result.instanceId,
+    result.revision,
+    listProvidersAPI,
+  )
+  rebuild()
+}
+
+export const refreshProxyProvider = async (name: string) => {
+  ensureSession()
+  await waitForProviderAction(await refreshProviderAPI(name))
+}
+
+export const healthCheckProxyProvider = async (name: string) => {
+  ensureSession()
+  await waitForProviderAction(await healthCheckProviderAPI(name))
 }
 
 export const handlerProxySelect = async (proxyGroupName: string, proxyName: string) => {
