@@ -5,11 +5,15 @@ import { computed } from 'vue'
 import ProxyNodeCard from './ProxyNodeCard.vue'
 import ProxyNodeGrid from './ProxyNodeGrid.vue'
 
-const props = defineProps<{
-  name?: string
-  now?: string
-  renderProxies: string[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    name: string
+    now?: string
+    renderProxies: string[]
+    selectable?: boolean
+  }>(),
+  { selectable: true },
+)
 
 const { maxProxies } = useCalculateMaxProxies(
   props.renderProxies.length,
@@ -26,7 +30,8 @@ const proxies = computed(() => props.renderProxies.slice(0, maxProxies.value))
       :name="node"
       :group-name="name"
       :active="node === now"
-      @click.stop="name && handlerProxySelect(name, node)"
+      :selectable="selectable"
+      @click.stop="selectable && handlerProxySelect(name, node)"
     />
   </ProxyNodeGrid>
 </template>

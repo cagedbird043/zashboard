@@ -143,6 +143,8 @@ interface ProxiesBackend {
   ) => Promise<unknown>
   proxyGroupLatencyTest: (proxyGroupName: string) => Promise<unknown>
   allProxiesLatencyTest: () => Promise<unknown>
+  refreshProxyProvider?: (name: string) => Promise<unknown>
+  healthCheckProxyProvider?: (name: string) => Promise<unknown>
 }
 
 const load = (): Promise<ProxiesBackend> =>
@@ -172,17 +174,42 @@ export const proxyGroupLatencyTest = async (proxyGroupName: string) =>
 
 export const allProxiesLatencyTest = async () => (await load()).allProxiesLatencyTest()
 
+type ProviderCapability = 'canRefresh' | 'canHealthCheck'
+type ProviderAction = 'refreshProxyProvider' | 'healthCheckProxyProvider'
+
+const runProviderAction = async (
+  name: string,
+  capability: ProviderCapability,
+  action: ProviderAction,
+) => {
+  const provider = proxyProviederList.value.find((item) => item.name === name)
+  if (!provider?.[capability]) {
+    throw new Error(`Provider ${action} is not supported: ${name}`)
+  }
+
+  const handler = (await load())[action]
+  if (!handler) {
+    throw new Error(`Provider ${action} is not implemented by the active backend`)
+  }
+
+  return handler(name)
+}
+
+export const refreshProxyProvider = (name: string) =>
+  runProviderAction(name, 'canRefresh', 'refreshProxyProvider')
+
+export const healthCheckProxyProvider = (name: string) =>
+  runProviderAction(name, 'canHealthCheck', 'healthCheckProxyProvider')
+
 // 后端切换 / 登出时丢弃 sing-box 订阅(clash 无需处理)。
 export const resetProxies = async () => {
   const m = await import('./singbox')
   m.resetProxies()
 }
 
-// 代理集 / smart 权重动作(Clash 专属),经 proxies 域门面暴露给 view 与 store/smart。
+// smart 权重动作仍是 Clash 专属；Provider 动作统一走上面的后端门面。
 export {
   fetchSmartGroupWeightsAPI,
   fetchSmartWeightsAPI,
   flushSmartGroupWeightsAPI,
-  proxyProviderHealthCheckAPI,
-  updateProxyProviderAPI,
 } from '@/api/clash'

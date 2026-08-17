@@ -26,6 +26,7 @@ import axios from 'axios'
 import { debounce } from 'lodash'
 import ReconnectingWebSocket from 'reconnectingwebsocket'
 import { shallowRef } from 'vue'
+type ClashProxyProvider = Omit<ProxyProvider, 'canRefresh' | 'canHealthCheck'>
 
 // ==========================================================================
 // 两方言共用
@@ -84,7 +85,7 @@ export const fetchProxyGroupLatencyAPI = (proxyName: string, url: string, timeou
 }
 
 export const fetchProxyProviderAPI = () => {
-  return axios.get<{ providers: Record<string, ProxyProvider> }>('/providers/proxies')
+  return axios.get<{ providers: Record<string, ClashProxyProvider> }>('/providers/proxies')
 }
 
 export const updateProxyProviderAPI = (name: string) => {
