@@ -9,7 +9,7 @@ import {
   proxiesTabShow,
   proxyGroupList,
   proxyProviederList,
-  updateProxyProviderAPI,
+  refreshProxyProvider,
 } from '@/assembly/proxies'
 import { renderProxiesPageItems } from '@/composables/proxies'
 import { isProxyNodeSearchMode, toggleProxySearchMode } from '@/composables/proxySearch'
@@ -59,12 +59,15 @@ export default defineComponent({
     const isAllLatencyTesting = ref(false)
     const settingsModel = ref(false)
     const { isLargeCtrlsBar } = useCtrlsBar()
+    const refreshableProviders = computed(() =>
+      proxyProviederList.value.filter((provider) => provider.canRefresh),
+    )
     const handlerClickUpdateAllProviders = async () => {
       if (isUpgrading.value) return
       isUpgrading.value = true
       try {
         await Promise.all(
-          proxyProviederList.value.map((provider) => updateProxyProviderAPI(provider.name)),
+          refreshableProviders.value.map((provider) => refreshProxyProvider(provider.name)),
         )
         await fetchProxies()
         isUpgrading.value = false
@@ -150,14 +153,15 @@ export default defineComponent({
           }))}
         />
       )
-      const upgradeAllIcon = proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER && (
-        <button
-          class="btn btn-circle btn-sm"
-          onClick={handlerClickUpdateAllProviders}
-        >
-          <ArrowPathIcon class={['h-4 w-4', isUpgrading.value && 'animate-spin']} />
-        </button>
-      )
+      const upgradeAllIcon = proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER &&
+        refreshableProviders.value.length > 0 && (
+          <button
+            class="btn btn-circle btn-sm"
+            onClick={handlerClickUpdateAllProviders}
+          >
+            <ArrowPathIcon class={['h-4 w-4', isUpgrading.value && 'animate-spin']} />
+          </button>
+        )
       const modeSelect = configs.value && (
         <select
           class={['select select-sm', isLargeCtrlsBar.value ? 'min-w-40' : 'min-w-24']}

@@ -7,7 +7,9 @@ import {
   fetchProxyLatencyAPI,
   fetchProxyProviderAPI,
   fetchProxyProviderLatencyAPI,
+  proxyProviderHealthCheckAPI,
   selectProxyAPI,
+  updateProxyProviderAPI,
 } from '@/api/clash'
 import { disconnectByIdAPI } from '@/assembly/connections'
 import { GLOBAL, IPV6_TEST_URL, NOT_CONNECTED, PROXY_TYPE, SPEEDTEST_MODE } from '@/constant'
@@ -55,9 +57,13 @@ export const fetchProxies = async () => {
 
   const sortIndex = proxyData.proxies[GLOBAL]?.all ?? []
   const allProviderProxies: Record<string, Proxy> = {}
-  const providers = Object.values(providerData.providers).filter(
-    (provider) => provider.name !== 'default' && provider.vehicleType !== 'Compatible',
-  )
+  const providers = Object.values(providerData.providers)
+    .filter((provider) => provider.name !== 'default' && provider.vehicleType !== 'Compatible')
+    .map((provider) => ({
+      ...provider,
+      canRefresh: provider.vehicleType !== 'Inline',
+      canHealthCheck: true,
+    }))
 
   for (const provider of providers) {
     for (const proxy of provider.proxies) {
@@ -352,3 +358,6 @@ const getIPv6FromExtra = (proxy: Proxy) => {
 
   return (last(ipv6History)?.delay ?? NOT_CONNECTED) > NOT_CONNECTED
 }
+
+export const refreshProxyProvider = updateProxyProviderAPI
+export const healthCheckProxyProvider = proxyProviderHealthCheckAPI

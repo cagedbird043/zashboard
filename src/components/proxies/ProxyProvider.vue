@@ -14,6 +14,7 @@
           <button
             class="btn btn-circle btn-ghost btn-sm z-30"
             @click.stop="healthCheckClickHandler"
+            v-if="proxyProvider.canHealthCheck"
           >
             <span
               v-if="isHealthChecking"
@@ -25,7 +26,7 @@
             />
           </button>
           <button
-            v-if="proxyProvider.vehicleType !== 'Inline'"
+            v-if="proxyProvider.canRefresh"
             :class="
               twMerge('btn btn-circle btn-ghost btn-sm z-30', isUpdating ? 'animate-spin' : '')
             "
@@ -64,18 +65,22 @@
       <ProxiesContent
         :name="name"
         :render-proxies="renderProxies"
+        :selectable="false"
       />
     </template>
   </CollapseCard>
 </template>
 
 <script setup lang="ts">
-import { proxyProviderHealthCheckAPI, updateProxyProviderAPI } from '@/assembly/proxies'
+import {
+  fetchProxies,
+  healthCheckProxyProvider,
+  proxyProviederList,
+  refreshProxyProvider,
+} from '@/assembly/proxies'
 import { useBounceOnVisible } from '@/composables/bouncein'
 import { useRenderProxyList } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
-import { fetchProxies } from '@/assembly/proxies'
-import { proxyProviederList } from '@/assembly/proxies'
 import { ArrowPathIcon, BoltIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
 import { toFinite } from 'lodash'
@@ -90,8 +95,8 @@ const props = defineProps<{
   name: string
 }>()
 
-const proxyProvider = computed(
-  () => proxyProviederList.value.find((group) => group.name === props.name)!,
+const proxyProvider = computed(() =>
+  proxyProviederList.value.find((group) => group.name === props.name)!,
 )
 const allProxies = computed(() => proxyProvider.value.proxies.map((node) => node.name) ?? [])
 const { renderProxies, proxiesCount } = useRenderProxyList(allProxies)
@@ -144,7 +149,7 @@ const healthCheckClickHandler = async () => {
 
   isHealthChecking.value = true
   try {
-    await proxyProviderHealthCheckAPI(props.name)
+    await healthCheckProxyProvider(props.name)
     await fetchProxies()
     isHealthChecking.value = false
   } catch {
@@ -157,7 +162,7 @@ const updateProviderClickHandler = async () => {
 
   isUpdating.value = true
   try {
-    await updateProxyProviderAPI(props.name)
+    await refreshProxyProvider(props.name)
     await fetchProxies()
     isUpdating.value = false
   } catch {

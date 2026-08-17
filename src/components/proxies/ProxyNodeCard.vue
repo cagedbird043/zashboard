@@ -3,9 +3,10 @@
     ref="cardRef"
     :class="
       twMerge(
-        'bg-base-200 relative flex cursor-pointer flex-col items-start rounded-md hover:shadow-sm',
+        'bg-base-200 relative flex flex-col items-start rounded-md hover:shadow-sm',
         active ? 'bg-primary sm:hover:bg-primary/95' : 'sm:hover:bg-base-300/50',
         isSmallCard ? 'gap-1 p-1' : 'gap-2 p-2',
+        selectable && 'cursor-pointer',
         latencyTipAnimationClass,
       )
     "
@@ -65,11 +66,15 @@ import LatencyTag from './LatencyTag.vue'
 import ProxyIcon from './ProxyIcon.vue'
 
 const { t } = useI18n()
-const props = defineProps<{
-  name: string
-  active?: boolean
-  groupName?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    name: string
+    active?: boolean
+    groupName?: string
+    selectable?: boolean
+  }>(),
+  { selectable: true },
+)
 
 const cardRef = ref()
 const node = computed(() => proxyMap.value[props.name])

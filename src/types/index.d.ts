@@ -73,6 +73,8 @@ export type SubscriptionInfo = {
 
 export type ProxyProvider = {
   subscriptionInfo?: SubscriptionInfo
+  canRefresh: boolean
+  canHealthCheck: boolean
   name: string
   proxies: Proxy[]
   testUrl: string
