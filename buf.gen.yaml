@@ -3,6 +3,9 @@ inputs:
   - directory: vendor/sing-box
     paths:
       - vendor/sing-box/daemon/started_service.proto
+      # Source: sing-box c9416e330ce53fd309fe4e021b2b0f0f4162c378
+      # SHA-256: 4f7b1b900c7cfeb71df14c695c6e05bb1708e25f0b6438ce319d562fbe4ba892
+      - vendor/sing-box/daemon/provider_service.proto
 plugins:
   - local: protoc-gen-es
     out: src/gen
