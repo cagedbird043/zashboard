@@ -8,7 +8,11 @@ export interface StreamHandle {
 export const runStream = <T>(
   factory: (signal: AbortSignal) => AsyncIterable<T>,
   onMessage: (msg: T) => void,
-  options: { onError?: (err: unknown) => void; resetBackoffOnMessage?: boolean } = {},
+  options: {
+    onError?: (err: unknown) => void
+    resetBackoffOnMessage?: boolean
+    shouldRetry?: (err: unknown) => boolean
+  } = {},
 ): StreamHandle => {
   let controller: AbortController | null = null
   let closed = false
@@ -26,6 +30,7 @@ export const runStream = <T>(
       } catch (err) {
         if (closed) return
         options.onError?.(err)
+        if (options.shouldRetry?.(err) === false) return
       }
       if (closed) return
       const delay = Math.min(1000 * 2 ** attempt, 15000)
