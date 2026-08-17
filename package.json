@@ -14,7 +14,7 @@
     "build:sarasa-only": "FONT=sarasa vite build",
     "dev": "vite",
     "format": "prettier --write src/",
-    "generate": "buf generate && prettier --write src/gen/daemon/*.ts",
+    "generate": "buf generate && prettier --write src/gen/daemon/*.ts && eslint --fix src/gen/daemon/*.ts",
     "generate:check": "pnpm generate && git diff --exit-code -- src/gen",
     "lint": "eslint . --fix",
     "prepare": "husky",
