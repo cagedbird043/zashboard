@@ -14,6 +14,7 @@ import { GLOBAL, IPV6_TEST_URL, NOT_CONNECTED, PROXY_TYPE, SPEEDTEST_MODE } from
 import { getConnectionChains, isProxyGroup } from '@/helper'
 import { showNotification } from '@/helper/notification'
 import { notifyRequestError } from '@/helper/requestError'
+import { i18n } from '@/i18n'
 import { activeConnections } from '@/store/connections'
 import {
   automaticDisconnection,
@@ -361,7 +362,7 @@ export const allProxiesLatencyTest = async () => {
 
   const proxyNode = Object.keys(proxyMap.value).filter((proxy) => !isProxyGroup(proxy))
 
-  return testLatencyOneByOneWithTip('all', proxyNode)
+  return testLatencyOneByOneWithTip(i18n.global.t('all'), proxyNode)
 }
 
 const getIPv6FromExtra = (proxy: Proxy) => {
