@@ -12,11 +12,8 @@ import { join } from 'node:path'
 interface SyncMetadata {
   releaseTag: string
   releaseSha: string
-  expectedMainSha: string
-  upstreamMainSha: string
   expectedProviderSha: string
   candidateSha: string
-  mainChanged: boolean
   providerChanged: boolean
 }
 
@@ -50,24 +47,6 @@ async function command(cwd: string, args: string[]): Promise<string> {
   return stdout.trim()
 }
 
-async function isAncestor(
-  repository: string,
-  ancestor: string,
-  descendant: string,
-): Promise<boolean> {
-  const process = Bun.spawn(
-    ['git', '-C', repository, 'merge-base', '--is-ancestor', ancestor, descendant],
-    {
-      stdout: 'ignore',
-      stderr: 'ignore',
-      env: Bun.env,
-    },
-  )
-  const exitCode = await process.exited
-  if (exitCode > 1) throw new Error(`git merge-base --is-ancestor failed (${exitCode})`)
-  return exitCode === 0
-}
-
 async function publicGitHub<T>(path: string): Promise<T> {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
@@ -85,7 +64,7 @@ function writeOutputs(metadata: SyncMetadata): void {
   if (!output) return
   appendFileSync(
     output,
-    `main_changed=${metadata.mainChanged}\nprovider_changed=${metadata.providerChanged}\nrelease_tag=${metadata.releaseTag}\n`,
+    `provider_changed=${metadata.providerChanged}\nrelease_tag=${metadata.releaseTag}\n`,
   )
 }
 
@@ -125,16 +104,10 @@ async function prepare(): Promise<void> {
       'ls-remote',
       '--heads',
       'origin',
-      'refs/heads/main',
       `refs/heads/${providerBranch}`,
     ])
-    if (
-      !remoteRefs.includes('refs/heads/main') ||
-      !remoteRefs.includes(`refs/heads/${providerBranch}`)
-    ) {
-      throw new Error(
-        'Fork bootstrap is incomplete: main and generated Provider branches must both exist',
-      )
+    if (!remoteRefs.includes(`refs/heads/${providerBranch}`)) {
+      throw new Error('Fork bootstrap is incomplete: generated Provider branch does not exist')
     }
     await command(repository, [
       'git',
@@ -143,7 +116,6 @@ async function prepare(): Promise<void> {
       'fetch',
       '--no-tags',
       'origin',
-      'refs/heads/main:refs/remotes/origin/main',
       `refs/heads/${providerBranch}:refs/remotes/origin/${providerBranch}`,
     ])
     await command(repository, [
@@ -153,25 +125,8 @@ async function prepare(): Promise<void> {
       'fetch',
       '--no-tags',
       'upstream',
-      'refs/heads/main:refs/remotes/upstream/main',
       `refs/tags/${release.tag_name}:refs/tags/${release.tag_name}`,
     ])
-
-    const expectedMainSha = await command(repository, [
-      'git',
-      'rev-parse',
-      'refs/remotes/origin/main',
-    ])
-    const upstreamMainSha = await command(repository, [
-      'git',
-      'rev-parse',
-      'refs/remotes/upstream/main',
-    ])
-    if (!(await isAncestor(repository, expectedMainSha, upstreamMainSha))) {
-      throw new Error(
-        'Fork main is not a fast-forward ancestor of upstream main; refusing to rewrite mirror history',
-      )
-    }
 
     const expectedProviderSha = await command(repository, [
       'git',
@@ -208,11 +163,8 @@ async function prepare(): Promise<void> {
     const metadata: SyncMetadata = {
       releaseTag: release.tag_name,
       releaseSha,
-      expectedMainSha,
-      upstreamMainSha,
       expectedProviderSha,
       candidateSha,
-      mainChanged: expectedMainSha !== upstreamMainSha,
       providerChanged,
     }
     writeFileSync(
@@ -268,7 +220,6 @@ async function validate(): Promise<void> {
 async function promote(): Promise<void> {
   const forkRepository =
     Bun.env.FORK_REPOSITORY?.trim() || Bun.env.GITHUB_REPOSITORY?.trim() || 'cagedbird043/zashboard'
-  const upstreamRepository = Bun.env.UPSTREAM_REPOSITORY?.trim() || 'Zephyruso/zashboard'
   const providerBranch = Bun.env.PROVIDER_BRANCH?.trim() || 'cagedbird/providers'
   const outputDirectory = Bun.env.SYNC_OUTPUT_DIR?.trim() || join(process.cwd(), 'sync-output')
   const metadata = readMetadata()
@@ -287,57 +238,22 @@ async function promote(): Promise<void> {
     ])
     await command(repository, [
       'git',
-      'remote',
-      'add',
-      'upstream',
-      `https://github.com/${upstreamRepository}.git`,
-    ])
-    await command(repository, [
-      'git',
       '-c',
       'core.hooksPath=/dev/null',
       'fetch',
       '--no-tags',
       'origin',
-      'refs/heads/main:refs/remotes/origin/main',
       `refs/heads/${providerBranch}:refs/remotes/origin/${providerBranch}`,
     ])
-    await command(repository, [
-      'git',
-      '-c',
-      'core.hooksPath=/dev/null',
-      'fetch',
-      '--no-tags',
-      'upstream',
-      'refs/heads/main:refs/remotes/upstream/main',
-    ])
-    const currentMain = await command(repository, ['git', 'rev-parse', 'refs/remotes/origin/main'])
     const currentProvider = await command(repository, [
       'git',
       'rev-parse',
       `refs/remotes/origin/${providerBranch}`,
     ])
-    const currentUpstream = await command(repository, [
-      'git',
-      'rev-parse',
-      'refs/remotes/upstream/main',
-    ])
-    if (
-      currentMain !== metadata.expectedMainSha ||
-      currentProvider !== metadata.expectedProviderSha ||
-      currentUpstream !== metadata.upstreamMainSha
-    ) {
-      throw new Error('Remote refs changed after validation; refusing stale promotion')
+    if (currentProvider !== metadata.expectedProviderSha) {
+      throw new Error('Provider ref changed after validation; refusing stale promotion')
     }
 
-    if (metadata.mainChanged) {
-      await command(repository, [
-        'git',
-        'push',
-        'origin',
-        `${metadata.upstreamMainSha}:refs/heads/main`,
-      ])
-    }
     if (metadata.providerChanged) {
       await command(repository, [
         'git',
