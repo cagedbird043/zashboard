@@ -1,0 +1,37 @@
+[Unit]
+Description=Build and activate Zashboard from promoted Git source
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/local/libexec/zashboard-reconcile
+
+[Service]
+Type=oneshot
+User=zashboard-build
+Group=zashboard-build
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+RuntimeDirectory=zashboard-reconcile
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/flock --nonblock /run/zashboard-reconcile/lock /usr/local/libexec/zashboard-reconcile
+TimeoutStartSec=1800
+UMask=0022
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/zashboard /srv/zashboard-runtime
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
