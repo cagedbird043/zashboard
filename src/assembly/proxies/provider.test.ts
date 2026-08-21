@@ -13,6 +13,8 @@ vi.mock('@/assembly/backend', () => ({
   channel: { value: 'clash' },
 }))
 
+vi.mock('@/helper/requestError', () => ({ notifyRequestError: vi.fn() }))
+
 vi.mock('@/store/settings', () => ({
   groupTestUrls: { value: [] },
   independentLatencyTest: { value: false },
