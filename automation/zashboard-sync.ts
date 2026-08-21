@@ -197,7 +197,14 @@ async function validate(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), 'zashboard-validate-'))
   const repository = join(work, 'candidate')
   try {
-    await command(work, ['git', 'clone', join(outputDirectory, 'candidate.bundle'), repository])
+    await command(work, [
+      'git',
+      'clone',
+      '--branch',
+      'candidate',
+      join(outputDirectory, 'candidate.bundle'),
+      repository,
+    ])
     const candidateSha = await command(repository, ['git', 'rev-parse', 'HEAD'])
     if (candidateSha !== metadata.candidateSha)
       throw new Error('Candidate bundle SHA does not match prepared metadata')
