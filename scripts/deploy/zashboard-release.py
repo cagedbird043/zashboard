@@ -93,7 +93,7 @@ def entries(root, files):
     for value in parser.paths:
         url = urlsplit(value)
         require(not url.scheme and not url.netloc and not url.fragment, "entrypoint must be a local resource")
-        name = safe_name(unquote(url.path).removeprefix("/"))
+        name = safe_name(PurePosixPath(unquote(url.path).removeprefix("/")).as_posix())
         require(name in files, f"missing entrypoint: {name}")
         result.append(name)
     require(len(result) > 1, "index.html has no script/css entrypoints")

@@ -104,7 +104,7 @@ class DeploymentChecks(unittest.TestCase):
     def fixture(path, text):
         path.mkdir(parents=True)
         (path / "assets").mkdir()
-        (path / "index.html").write_text('<html><link rel="stylesheet" href="/assets/main.css"><script type="module" src="/assets/main.js"></script></html>')
+        (path / "index.html").write_text('<html><link rel="stylesheet" href="./assets/main.css"><script type="module" src="./assets/main.js"></script></html>')
         (path / "assets/main.js").write_text(text)
         (path / "assets/main.css").write_text("body { color: blue }")
         return path

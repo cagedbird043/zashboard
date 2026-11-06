@@ -1,0 +1,84 @@
+name: Cagedbird Deploy
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        type: string
+        required: true
+      artifact-run-id:
+        type: string
+        required: true
+    secrets:
+      BOARD_DEPLOY_SSH_KEY:
+        required: true
+      BOARD_DEPLOY_KNOWN_HOSTS:
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cagedbird-board-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy board.cagedbird.cn
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: board-production
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Check the requested commit is still current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$DEPLOY_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh api repos/cagedbird043/zashboard/git/ref/heads/singbox --jq '.object.sha')" = "$DEPLOY_COMMIT"
+      - name: Download the validated all-fonts distribution
+        uses: actions/download-artifact@v6
+        with:
+          name: zashboard-all
+          path: ${{ runner.temp }}/board-dist
+          run-id: ${{ inputs.artifact-run-id }}
+          github-token: ${{ github.token }}
+      - name: Configure the restricted deployment identity
+        env:
+          DEPLOY_KEY: ${{ secrets.BOARD_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.BOARD_DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.BOARD_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.BOARD_DEPLOY_PORT }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/board-deploy"
+          chmod 600 "$HOME/.ssh/board-deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/board-known-hosts"
+          cat > "$HOME/.ssh/config" <<EOF
+          Host board-production
+            HostName $DEPLOY_HOST
+            Port $DEPLOY_PORT
+            User board-deploy
+            IdentityFile $HOME/.ssh/board-deploy
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile $HOME/.ssh/board-known-hosts
+          EOF
+          chmod 600 "$HOME/.ssh/config" "$HOME/.ssh/board-known-hosts"
+      - name: Upload, atomically activate and verify HTTPS
+        env:
+          DEPLOY_COMMIT: ${{ inputs.commit }}
+        run: bash scripts/deploy/deploy.sh "$RUNNER_TEMP/board-dist" "$DEPLOY_COMMIT" board-production
+      - name: Record the deployed commit
+        env:
+          DEPLOY_COMMIT: ${{ inputs.commit }}
+        run: printf '### 已部署 board.cagedbird.cn\n\n提交：%s\n\n产物来自通过验收的同一份构建，服务器已完成 HTTPS 检查。\n' "$DEPLOY_COMMIT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove deployment credentials
+        if: always()
+        run: rm -f "$HOME/.ssh/board-deploy" "$HOME/.ssh/board-known-hosts" "$HOME/.ssh/config"

@@ -36,18 +36,32 @@ probe 结果与订阅链接需要支持相应 API 字段的 cagedbird 核心。�
 
 ### 补丁栈维护
 
-- 工作分支：`singbox`；当前基线：原作者 `v3.30.0`（`bf4f00bb8d905f8a78f627af7cf84457c4db53c4`）。`upstream` 指向 `Zephyruso/zashboard`，`rainac1` 仅保留作来源参考，`origin` 指向本 fork。
+- 工作分支：`singbox`；当前上游 tag 与精确 SHA 记录在 [`scripts/ci/upstream-base.json`](scripts/ci/upstream-base.json)。`upstream` 指向 `Zephyruso/zashboard`，`rainac1` 仅保留作来源参考，`origin` 指向本 fork。
 - 基线之上只保留按主题组织的线性提交，不合入中间 fork 的 merge 历史。平时在栈顶提交；跟进新版本时再将同主题迭代整理到对应提交。
 - 后端通信和数据适配放在 `src/api/singbox/`、`src/assembly/singbox/`；专属界面放在独立组件，翻译放在 `src/i18n/singbox/`。共享组件只保留必要接入点，不复制整套上游组件。
 - 跟进前记录旧基线与工作分支 SHA，在候选分支执行 `git rebase --onto <新基线> <旧基线>`。逐项检查补丁，并用 `git range-diff <旧基线>..<旧SHA> <新基线>..<候选SHA>` 核对；已被上游实现的补丁直接删除。
 - 每个主题提交必须能单独通过类型检查和生产构建；最终用真实核心验收 probe、订阅刷新、日志、连接及移动布局。验收后再晋升工作分支，推送使用 `git push --force-with-lease=refs/heads/singbox:<记录的旧SHA> origin singbox:refs/heads/singbox`，不移动已发布 tag。
-- 仓库历史整理和公网部署分开执行。静态构建验收通过后才部署，保留上一版 release 目录以便回滚；不自动变基、自动部署或修改客户端核心。
+- GitHub Actions 自动跟进原作者正式 tag，并在完整验收后晋升、部署；不跟进 `main` 中间提交，不自动修改客户端核心。人工修改共享文件仍须遵守下面的发布门槛。
 
 ### CI
 
-推送到 `singbox`、`cagedbird/candidate-*`，或提交面向 `singbox` 的 PR 时运行 **Cagedbird CI**，也可手动运行。使用 Node.js 24 和 `packageManager` 锁定的 pnpm，冻结安装依赖，执行类型检查、只读 ESLint、生产构建，以及真实 headless Chrome 的代理行为、自动连接与折叠生命周期验收。浏览器固定为英语，避免系统语言影响测试选择器。
+推送到 `singbox`、`cagedbird/candidate-*`，或提交面向 `singbox` 的 PR 时运行 **Cagedbird CI**，也可手动运行。自动上游候选由同步工作流直接调用同一套 CI，避免重复触发。使用 Node.js 24 和 `packageManager` 锁定的 pnpm，冻结安装依赖，执行类型检查、只读 ESLint、生产构建，以及真实 headless Chrome 的代理行为、自动连接与折叠生命周期验收。浏览器固定为英语，保留浏览器沙箱。
 
-CI 构建全部七种字体变体，产物保存在 Actions artifacts 14 天，不创建 Release、不部署公网面板。`cagedbird-release.yml` 仅允许显式手动触发发布；原作者工作流保持不变。
+原生验收使用 [`scripts/ci/sing-box-release.json`](scripts/ci/sing-box-release.json) 固定的 cagedbird 核心及 SHA256，隔离启动本地核心与 HTTP 订阅，不访问真实客户端。覆盖 probe 筛选生命周期、成功/失败/未测结果隔离、合格节点保留，以及订阅链接遮蔽、复制和刷新后的节点与用量变化。
+
+CI 构建全部七种字体变体，完整性清单和提交 SHA 随产物保存在 Actions artifacts 14 天。`singbox` 通过全部检查后自动部署其中的 all-fonts 产物；候选、PR 不部署。`cagedbird-release.yml` 仍仅允许显式手动触发 GitHub Release；原作者工作流保持不变。
+
+### 自动跟进与部署
+
+- **Cagedbird Upstream Sync** 每天 UTC 03:17、15:17 检查原作者严格的 `v主版本.次版本.补丁版本` tag，也可手动运行。只接受比已记录基线更新、且继承该基线的正式版本；预发布、移动过的基线 tag、非线性补丁栈或未知历史漂移均停止。
+- 变基在隔离工作树进行，不自动解决代码冲突，也不自动丢弃代码补丁。仅移除旧的纯基线元数据提交，再写入本轮基线；冲突不修改 `singbox`。候选推送、完整 CI、旧 SHA 租约晋升依次执行，任一步失败都不继续上线；从 Actions 失败通知查看原因。
+- 晋升后直接部署候选 CI 验收的同一份产物，不在服务器重新构建。我们自己的 `singbox` push 也使用相同部署流程。同步用仓库写入密钥，部署用另一把专用密钥，两者隔离。
+- bj-edge 的 `board-deploy` 无 sudo 权限；SSH 公钥只能执行限定的 rsync 接收和版本切换协议。部署固定主机公钥，不使用 `StrictHostKeyChecking=no`。生产环境只允许 `singbox` 分支。
+- rsync 只写 `/srv/zashboard/incoming/<完整SHA>/`，`--delete` 不作用于在线目录。服务器校验整份文件清单，拒绝额外文件和软链，确认远端 `singbox` 仍指向该 SHA 后，转存 `releases/<SHA>` 并原子切换 `current`。
+- 切换后通过带真实域名与 TLS 校验的本机 HTTPS 请求核对版本、入口和资源；失败自动恢复旧链接。切换和检查由服务器单次命令在锁内完成，CI 断线也不依赖后续 SSH 才能回滚。保留当前、前一版及最近版本，未知命名的历史目录不自动删除。
+- 仓库变量：`BOARD_DEPLOY_HOST`、`BOARD_DEPLOY_PORT`；Secrets：`UPSTREAM_SYNC_SSH_KEY`、`BOARD_DEPLOY_SSH_KEY`、`BOARD_DEPLOY_KNOWN_HOSTS`。凭据不进入构建、PR 和原生验收步骤。线上 [`/release.json`](https://board.cagedbird.cn/release.json) 可查询部署提交。
+
+本地原生验收：先构建，再运行 `SING_BOX_BINARY=/path/to/sing-box node test/singbox.mjs`；未指定二进制时使用固定发布包。同步算法与部署回滚检查分别为 `python3 scripts/ci/test-upstream-sync.py`、`python3 scripts/deploy/test_deploy.py`。
 
 
 

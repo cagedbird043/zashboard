@@ -5,17 +5,29 @@ on:
     branches:
       - singbox
       - 'cagedbird/candidate-*'
+      - '!cagedbird/candidate-upstream-*'
   pull_request:
     branches:
       - singbox
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      source-ref:
+        type: string
+        default: ''
+    secrets:
+      BOARD_DEPLOY_SSH_KEY:
+        required: false
+      BOARD_DEPLOY_KNOWN_HOSTS:
+        required: false
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: cagedbird-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/singbox' }}
 
 env:
   HUSKY: '0'
@@ -27,6 +39,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source-ref || github.sha }}
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -34,6 +49,10 @@ jobs:
           cache: pnpm
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify synchronization invariants
+        run: python3 scripts/ci/test-upstream-sync.py
+      - name: Verify atomic deployment and rollback
+        run: python3 scripts/deploy/test_deploy.py
       - name: Typecheck
         run: pnpm type-check
       - name: Lint without modifying files
@@ -55,6 +74,15 @@ jobs:
         run: pnpm test:setup
       - name: Collapse lifecycle smoke
         run: node test/collapse.mjs
+      - name: Download the pinned native core
+        id: native-core
+        run: echo "binary=$(bash scripts/ci/download-sing-box.sh "$RUNNER_TEMP/native-core")" >> "$GITHUB_OUTPUT"
+      - name: Native probe and provider smoke
+        env:
+          SING_BOX_BINARY: ${{ steps.native-core.outputs.binary }}
+        run: node test/singbox.mjs
+      - name: Seal the validated distribution
+        run: python3 scripts/deploy/seal.py dist "$(git rev-parse HEAD)"
       - name: Upload all-fonts distribution
         uses: actions/upload-artifact@v6
         with:
@@ -73,6 +101,9 @@ jobs:
         font: [cdn, firasans, misans, pingfang, sarasa, none]
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source-ref || github.sha }}
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -84,6 +115,8 @@ jobs:
         env:
           FONT: ${{ matrix.font }}
         run: pnpm build
+      - name: Seal the distribution
+        run: python3 scripts/deploy/seal.py dist "$(git rev-parse HEAD)"
       - name: Upload distribution
         uses: actions/upload-artifact@v6
         with:
@@ -91,3 +124,17 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
+  deploy:
+    needs: [checks, fonts]
+    if: >-
+      github.repository == 'cagedbird043/zashboard' && inputs.source-ref == '' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/singbox') ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/singbox'))
+    uses: ./.github/workflows/cagedbird-deploy.yml
+    with:
+      commit: ${{ github.sha }}
+      artifact-run-id: ${{ github.run_id }}
+    secrets:
+      BOARD_DEPLOY_SSH_KEY: ${{ secrets.BOARD_DEPLOY_SSH_KEY }}
+      BOARD_DEPLOY_KNOWN_HOSTS: ${{ secrets.BOARD_DEPLOY_KNOWN_HOSTS }}
