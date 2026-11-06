@@ -38,19 +38,11 @@
       >
         {{ prettyBytesHelper(downloadTotal) }}/s
       </div>
-      <ProbeGroupStatus
-        v-if="proxyGroup.type.toLowerCase() === 'probe'"
+      <ProxyGroupMeasurement
         :name="name"
         :loading="isLatencyTesting"
-        @screen="emit('latency-test')"
-      />
-      <LatencyTag
-        v-else
-        :class="twMerge('bg-base-200/40 hover:bg-base-200/70 z-10')"
-        :loading="isLatencyTesting"
-        :name="proxyGroup.now"
-        :group-name="proxyGroup.name"
-        @click.stop="emit('latency-test')"
+        latency-class="z-10"
+        @measure="emit('latency-test')"
       />
     </div>
     <ProxyIcon
@@ -73,15 +65,13 @@ import { proxyMap } from '@/assembly/proxies'
 import { useTooltip } from '@/composables/use-tooltip'
 import { prettyBytesHelper } from '@/helper/utils'
 import { manageHiddenGroup, twoColumnProxyGroup } from '@/store/settings'
-import { twMerge } from 'tailwind-merge'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VisibilityToggle from '../common/VisibilityToggle.vue'
-import LatencyTag from './LatencyTag.vue'
+import ProxyGroupMeasurement from './ProxyGroupMeasurement.vue'
 import ProxyGroupFilter from './ProxyGroupFilter.vue'
 import ProxyGroupNow from './ProxyGroupNow.vue'
 import ProxyIcon from './ProxyIcon.vue'
-import ProbeGroupStatus from './ProbeGroupStatus.vue'
 
 const props = defineProps<{
   name: string

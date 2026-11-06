@@ -1,7 +1,7 @@
 <template>
   <div
     :class="cardClass"
-    @contextmenu.stop.prevent="handlerLatencyTest"
+    @contextmenu.stop.prevent="measurement?.measure()"
   >
     <div
       class="w-full flex-1 text-sm"
@@ -31,19 +31,13 @@
       >
         {{ typeDescription }}
       </span>
-      <ProbeReportBadge
-        v-if="isProbeGroup"
+      <ProxyNodeMeasurement
+        ref="measurement"
         :name="name"
-        :group-name="groupName!"
-        :active="active"
-      />
-      <LatencyTag
-        v-if="!isProbeGroup"
-        :class="[isSmallCard && 'h-4! w-8! rounded-md!', 'shrink-0']"
-        :name="node.name"
-        :loading="isLatencyTesting"
         :group-name="groupName"
-        @click.stop="handlerLatencyTest"
+        :active="active"
+        :compact="isSmallCard"
+        :after-measure="handleMeasured"
       />
     </div>
   </div>
@@ -58,14 +52,12 @@ import {
   highlightedProxyNode,
   scrollNodeIntoViewKey,
 } from '@/helper/proxies-scroll'
-import { proxyLatencyTest, proxyGroupLatencyTest } from '@/assembly/proxies'
-import { getIPv6ByName, getTestUrl, proxyMap } from '@/assembly/proxies'
+import { getIPv6ByName, proxyMap } from '@/assembly/proxies'
 import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
-import { computed, inject, nextTick, ref } from 'vue'
+import { computed, inject, nextTick, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import LatencyTag from './LatencyTag.vue'
 import ProxyIcon from './ProxyIcon.vue'
-import ProbeReportBadge from './ProbeReportBadge.vue'
+import ProxyNodeMeasurement from './ProxyNodeMeasurement.vue'
 
 const { t } = useI18n()
 const props = defineProps<{
@@ -75,8 +67,7 @@ const props = defineProps<{
 }>()
 
 const node = computed(() => proxyMap.value[props.name])
-const isProbeGroup = computed(() => !!props.groupName && proxyMap.value[props.groupName]?.type.toLowerCase() === 'probe')
-const isLatencyTesting = ref(false)
+const measurement = useTemplateRef('measurement')
 const typeFormatter = (type: string) => {
   type = type.toLowerCase()
   type = type.replace('shadowsocks', 'ss')
@@ -109,18 +100,7 @@ const cardClass = computed(() => [
   isSmallCard.value ? 'gap-1 p-1' : 'gap-2 p-2',
   latencyTipAnimationClass.value,
 ])
-const handlerLatencyTest = async () => {
-  if (isLatencyTesting.value) return
-
-  isLatencyTesting.value = true
-  try {
-    if (isProbeGroup.value) await proxyGroupLatencyTest(props.groupName!)
-    else await proxyLatencyTest(props.name, getTestUrl(props.groupName))
-    isLatencyTesting.value = false
-  } catch {
-    isLatencyTesting.value = false
-  }
-
+const handleMeasured = async () => {
   if ([PROXY_SORT_TYPE.LATENCY_ASC, PROXY_SORT_TYPE.LATENCY_DESC].includes(proxySortType.value)) {
     highlightProxyNode(props.name)
     await nextTick()
