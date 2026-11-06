@@ -12,8 +12,9 @@
         </div>
         <div class="flex items-center gap-1.5">
           <button
-            v-if="can('proxyProviderHealthCheck')"
+            v-if="can('proxyProviderHealthCheck') && proxyProvider.canHealthCheck !== false"
             class="btn btn-circle btn-ghost btn-sm z-30"
+            :aria-label="$t('providerHealthCheck')"
             @click.stop="healthCheckClickHandler"
           >
             <span
@@ -26,10 +27,11 @@
             />
           </button>
           <button
-            v-if="proxyProvider.vehicleType !== 'Inline' && can('proxyProviderUpdate')"
+            v-if="proxyProvider.vehicleType !== 'Inline' && can('proxyProviderUpdate') && proxyProvider.canRefresh !== false"
             :class="
               twMerge('btn btn-circle btn-ghost btn-sm z-30', isUpdating ? 'animate-spin' : '')
             "
+            :aria-label="$t('refresh')"
             @click.stop="updateProviderClickHandler"
           >
             <ArrowPathIcon class="h-3.5 w-3.5 opacity-60" />
@@ -37,6 +39,16 @@
         </div>
       </div>
       <div class="mt-2 space-y-1.5">
+        <div v-if="proxyProvider.url" class="flex min-w-0 items-center gap-2 text-xs" @click.stop>
+          <span class="shrink-0 text-base-content/60">{{ $t('subscriptionURL') }}</span>
+          <span class="min-w-0 flex-1 break-all select-text">{{ showURL ? proxyProvider.url : '••••••••' }}</span>
+          <button class="btn btn-ghost btn-xs shrink-0" :aria-label="$t(showURL ? 'hideSubscriptionURL' : 'showSubscriptionURL')" @click.stop="showURL = !showURL">
+            <component :is="showURL ? EyeSlashIcon : EyeIcon" class="size-3.5" />
+          </button>
+          <button class="btn btn-ghost btn-xs shrink-0" :aria-label="$t('copy')" @click.stop="copyURL">
+            <ClipboardIcon class="size-3.5" />
+          </button>
+        </div>
         <div
           v-if="subscriptionInfo"
           class="space-y-1"
@@ -54,7 +66,7 @@
           </div>
         </div>
         <div class="text-base-content/60 text-xs">
-          {{ $t('updated') }} {{ fromNow(proxyProvider.updatedAt) }}
+          {{ $t('updated') }} {{ proxyProvider.updatedAt ? fromNow(proxyProvider.updatedAt) : $t('unknown') }}
         </div>
       </div>
     </template>
@@ -76,23 +88,37 @@ import { notifyRequestError } from '@/helper/request-error'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { fetchProxies } from '@/assembly/proxies'
 import { proxyProviederList } from '@/assembly/proxies'
-import { ArrowPathIcon, BoltIcon } from '@heroicons/vue/24/outline'
+import { ArrowPathIcon, BoltIcon, EyeIcon, EyeSlashIcon, ClipboardIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
 import { toFinite } from 'lodash'
 import { twMerge } from 'tailwind-merge'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CollapseCard from '../common/CollapseCard.vue'
 import ProxiesContent from './ProxiesContent.vue'
 import ProxyPreview from './ProxyPreview.vue'
+import { showNotification } from '@/helper/notification'
 
 const props = defineProps<{
   name: string
 }>()
+const { t } = useI18n()
+const showURL = ref(false)
+const copyURL = async () => {
+  const url = proxyProvider.value.url
+  if (!url) return
+  try {
+    await navigator.clipboard.writeText(url)
+    showNotification({ content: 'copySuccess', type: 'alert-success', timeout: 2000 })
+  } catch (error) {
+    notifyRequestError(error)
+  }
+}
 
 const proxyProvider = computed(() =>
   proxyProviederList.value.find((group) => group.name === props.name)!,
 )
+watch(() => proxyProvider.value?.url, () => { showURL.value = false })
 const allProxies = computed(() => proxyProvider.value.proxies.map((node) => node.name) ?? [])
 const { renderProxies, proxiesCount } = useRenderProxyList(allProxies)
 
@@ -106,7 +132,6 @@ const subscriptionInfo = computed(() => {
       return null
     }
 
-    const { t } = useI18n()
     const total = prettyBytesHelper(Total, { binary: true })
     const used = prettyBytesHelper(Download + Upload, { binary: true })
     const percentage = toFinite((((Download + Upload) / Total) * 100).toFixed(2))

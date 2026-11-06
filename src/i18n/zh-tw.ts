@@ -1,6 +1,21 @@
 import type { LANG_MESSAGE } from './en'
 
 const zhTW: LANG_MESSAGE = {
+  probePassed: '合格',
+  probeFailed: '淘汰',
+  probeUntested: '未檢測',
+  probeFirstByte: '首位元組',
+  probeTransfer: '傳輸時間',
+  probeRatio: '傳輸 / 首位元組',
+  probeRescreen: '重新篩選',
+  probeScreening: '篩選中',
+  probeUnsupported: '需要支援 probe 的新版核心',
+  probeKeepCurrent: '重新篩選共用節點池；目前節點合格就不切換。',
+  probeLastScreen: '上次節點池篩選',
+  subscriptionURL: '訂閱連結',
+  showSubscriptionURL: '顯示訂閱連結',
+  hideSubscriptionURL: '隱藏訂閱連結',
+  providerHealthCheck: '檢測訂閱節點',
   setup: '配置',
   overview: '概覽',
   proxies: '代理',

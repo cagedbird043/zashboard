@@ -31,7 +31,14 @@
       >
         {{ typeDescription }}
       </span>
+      <ProbeReportBadge
+        v-if="isProbeGroup"
+        :name="name"
+        :group-name="groupName!"
+        :active="active"
+      />
       <LatencyTag
+        v-if="!isProbeGroup"
         :class="[isSmallCard && 'h-4! w-8! rounded-md!', 'shrink-0']"
         :name="node.name"
         :loading="isLatencyTesting"
@@ -51,13 +58,14 @@ import {
   highlightedProxyNode,
   scrollNodeIntoViewKey,
 } from '@/helper/proxies-scroll'
-import { proxyLatencyTest } from '@/assembly/proxies'
+import { proxyLatencyTest, proxyGroupLatencyTest } from '@/assembly/proxies'
 import { getIPv6ByName, getTestUrl, proxyMap } from '@/assembly/proxies'
 import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
 import { computed, inject, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LatencyTag from './LatencyTag.vue'
 import ProxyIcon from './ProxyIcon.vue'
+import ProbeReportBadge from './ProbeReportBadge.vue'
 
 const { t } = useI18n()
 const props = defineProps<{
@@ -67,6 +75,7 @@ const props = defineProps<{
 }>()
 
 const node = computed(() => proxyMap.value[props.name])
+const isProbeGroup = computed(() => !!props.groupName && proxyMap.value[props.groupName]?.type.toLowerCase() === 'probe')
 const isLatencyTesting = ref(false)
 const typeFormatter = (type: string) => {
   type = type.toLowerCase()
@@ -105,7 +114,8 @@ const handlerLatencyTest = async () => {
 
   isLatencyTesting.value = true
   try {
-    await proxyLatencyTest(props.name, getTestUrl(props.groupName))
+    if (isProbeGroup.value) await proxyGroupLatencyTest(props.groupName!)
+    else await proxyLatencyTest(props.name, getTestUrl(props.groupName))
     isLatencyTesting.value = false
   } catch {
     isLatencyTesting.value = false

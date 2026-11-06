@@ -4,9 +4,11 @@ import type { DaeCapabilities } from '@/types'
 import { ref } from 'vue'
 
 export const daeCapabilities = ref<DaeCapabilities | null>(null)
+export const singboxProviderCapabilities = ref({ refresh: false, healthCheck: false })
 
 export const resetCapabilities = () => {
   daeCapabilities.value = null
+  singboxProviderCapabilities.value = { refresh: false, healthCheck: false }
 }
 
 export const fetchCapabilities = async () => {

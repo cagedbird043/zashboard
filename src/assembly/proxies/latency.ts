@@ -152,6 +152,14 @@ export const proxyGroupLatencyTest = async (proxyGroupName: string) => {
   if (!can('latencyTest')) return
 
   const proxyNode = proxyMap.value[proxyGroupName]
+  if (proxyNode.type.toLowerCase() === 'probe') {
+    try {
+      await driver().proxies.testGroup(proxyGroupName, '', speedtestTimeout.value)
+    } catch (e) {
+      notifyRequestError(e)
+    }
+    return
+  }
   const all = (proxyNode.all ?? []).filter(isLatencyTestable)
   const url = getTestUrl(proxyGroupName)
 

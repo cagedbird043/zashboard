@@ -1,4 +1,5 @@
 import { StartedService } from '@/gen/daemon/started_service_pb'
+import { ProviderService } from '@/gen/daemon/provider_service_pb'
 import type { ProbeResult } from '@/helper/connectivity'
 import { getSingboxSecret, getSingboxUrlFromBackend } from '@/helper/utils'
 import { activeBackend } from '@/store/setup'
@@ -21,15 +22,15 @@ const authInterceptor = (secret: string): Interceptor => {
 
 export class SingboxClient {
   readonly client: Client<typeof StartedService>
+  readonly providers: Client<typeof ProviderService>
 
   constructor(baseUrl: string, secret: string) {
-    this.client = createClient(
-      StartedService,
-      createGrpcWebTransport({
-        baseUrl,
-        interceptors: secret ? [authInterceptor(secret)] : [],
-      }),
-    )
+    const transport = createGrpcWebTransport({
+      baseUrl,
+      interceptors: secret ? [authInterceptor(secret)] : [],
+    })
+    this.client = createClient(StartedService, transport)
+    this.providers = createClient(ProviderService, transport)
   }
 }
 

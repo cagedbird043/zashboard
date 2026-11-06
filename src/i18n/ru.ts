@@ -1,6 +1,21 @@
 import type { LANG_MESSAGE } from './en'
 
 const ru: LANG_MESSAGE = {
+  probePassed: 'Прошёл',
+  probeFailed: 'Исключён',
+  probeUntested: 'Не проверен',
+  probeFirstByte: 'Первый байт',
+  probeTransfer: 'Передача',
+  probeRatio: 'Передача / первый байт',
+  probeRescreen: 'Проверить пул',
+  probeScreening: 'Проверка',
+  probeUnsupported: 'Обновите ядро для поддержки probe',
+  probeKeepCurrent: 'Проверяется общий пул; рабочий текущий узел не переключается.',
+  probeLastScreen: 'Последняя проверка пула',
+  subscriptionURL: 'URL подписки',
+  showSubscriptionURL: 'Показать URL подписки',
+  hideSubscriptionURL: 'Скрыть URL подписки',
+  providerHealthCheck: 'Проверить узлы подписки',
   setup: 'Настройка',
   overview: 'Обзор',
   proxies: 'Прокси',

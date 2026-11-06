@@ -89,6 +89,8 @@ export const handlerProxySelect = async (proxyGroupName: string, proxyName: stri
   try {
     const proxyGroup = proxyMap.value[proxyGroupName]
 
+    if (proxyGroup.selectable === false) return
+
     if (proxyGroup.type.toLowerCase() === PROXY_TYPE.LoadBalance) return
     if (proxyGroup.now === proxyName) {
       await fetchProxies()

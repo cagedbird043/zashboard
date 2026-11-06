@@ -11,6 +11,8 @@ import { activeBackend } from '@/store/setup'
 import type { Proxy } from '@/types'
 import type { ProxiesDriver, ProxiesPayload } from '../driver/types'
 import { isLatencyTestable, proxyGroupList, proxyMap, proxyProviederList } from '../proxies/state'
+import { nativeProviders, startProviders, resetProviders, refreshProvider, healthCheckProvider } from './providers'
+import { notifyRequestError } from '@/helper/request-error'
 
 const getHistoryFromItem = (item: GroupItem): Proxy['history'] =>
   item.urlTestDelay > 0
@@ -38,6 +40,7 @@ let outbounds = new Map<string, GroupItem>()
 let handles: StreamHandle[] = []
 let sessionKey = ''
 let ready: Promise<void> | null = null
+let providersReady: Promise<void> | null = null
 
 // 一次 URLTest 的「结果指纹」:sing-box 把测速历史(时间戳 + 延迟)随
 // SubscribeGroups / SubscribeOutbounds 推送，只保留最新一条且时间戳为秒级。
@@ -63,6 +66,52 @@ type URLTestWaiter = {
 }
 
 const urlTestWaiters = new Set<URLTestWaiter>()
+
+type ProbeWaiter = {
+  group: string
+  generation: bigint
+  resolve: () => void
+  reject: (reason: Error) => void
+}
+const probeWaiters = new Set<ProbeWaiter>()
+
+const rejectProbeWaiters = (reason: Error) => {
+  for (const waiter of probeWaiters) waiter.reject(reason)
+  probeWaiters.clear()
+}
+
+const settleProbeWaiters = () => {
+  for (const waiter of probeWaiters) {
+    const probe = groups.get(waiter.group)?.probe
+    if (!probe || probe.generation < waiter.generation) {
+      probeWaiters.delete(waiter)
+      waiter.reject(new Error('Probe group was removed or its core restarted'))
+    } else if (!probe.running && probe.generation > waiter.generation) {
+      probeWaiters.delete(waiter)
+      if (probe.error) waiter.reject(new Error(probe.error))
+      else waiter.resolve()
+    }
+  }
+}
+
+const runProbe = async (outboundTag: string) => {
+  const client = getSingboxClient()?.client
+  const group = groups.get(outboundTag)
+  if (!client || !group?.probe) throw new Error('This core does not expose the probe API')
+  let waiter!: ProbeWaiter
+  const result = new Promise<void>((resolve, reject) => {
+    waiter = { group: outboundTag, generation: group.probe!.generation, resolve, reject }
+    probeWaiters.add(waiter)
+  })
+  try {
+    await Promise.all([
+      client.uRLTest({ outboundTag }, { timeoutMs: urlTestBudget(speedtestTimeout.value) }),
+      result,
+    ])
+  } finally {
+    probeWaiters.delete(waiter)
+  }
+}
 
 // 把两个流的数据合成 tag → 结果指纹。同一 tag 可能同时出现在出站流和组快照里，
 // 两路到达有先后：组内成员一律以组快照为准，只有组里没有的 tag 才看出站流 ——
@@ -151,13 +200,20 @@ const waitForURLTestResult = (targets: string[], baseline: Map<string, string>, 
   }
 }
 
-// 由流数据原生组装共享状态(无 clash 的 provider / GLOBAL / 排序等概念)。
+// 由原生组、出站与 ProviderService 快照组装共享状态。
 const buildPayload = (): ProxiesPayload => {
   const proxies: Record<string, Proxy> = {}
 
   // 1) 出站叶子节点(含延迟)
   for (const item of outbounds.values()) {
     proxies[item.tag] = nodeToProxy(item)
+  }
+  for (const provider of nativeProviders.value) {
+    for (const node of provider.proxies) {
+      if (!proxies[node.name]) proxies[node.name] = node
+      proxies[node.name]['provider-name'] = provider.name
+      if (!proxies[node.name].history.length) proxies[node.name].history = node.history
+    }
   }
   // 2) 用组内 items 补建缺失的叶子节点(outbounds 流可能晚到或不含某些成员)
   for (const group of groups.values()) {
@@ -173,6 +229,10 @@ const buildPayload = (): ProxiesPayload => {
       now: group.selected,
       all: group.items.map((i) => i.tag),
       selectable: group.selectable,
+      probe: group.probe ? {
+        ...group.probe,
+        reports: Object.fromEntries(group.items.filter((item) => item.probe).map((item) => [item.tag, item.probe!])),
+      } : undefined,
       history: [],
       extra: {},
       icon: '',
@@ -195,7 +255,7 @@ const buildPayload = (): ProxiesPayload => {
 
   return {
     proxies,
-    providers: [],
+    providers: nativeProviders.value,
   }
 }
 
@@ -215,8 +275,11 @@ const closeStreams = () => {
   handles.forEach((h) => h.close())
   handles = []
   rejectURLTestWaiters(new Error('sing-box proxy stream closed'))
+  rejectProbeWaiters(new Error('sing-box proxy stream closed'))
   sessionKey = ''
   ready = null
+  resetProviders()
+  providersReady = null
 }
 
 const stop = () => {
@@ -263,7 +326,8 @@ const ensureSession = () => {
       // URLTest RPC 只负责启动任务；历史记录更新后，结果才会通过订阅推送。
       // 这里按各次测速的目标指纹结算，别让无关推送把等待提前唤醒。
       settleURLTestWaiters()
-    }),
+      settleProbeWaiters()
+    }, () => rejectProbeWaiters(new Error('Probe subscription disconnected'))),
     subscribeStream<OutboundList>('outbounds', (msg) => {
       if (!alive()) {
         stop()
@@ -275,6 +339,7 @@ const ensureSession = () => {
       settleURLTestWaiters()
     }),
   ]
+  providersReady = startProviders(applyPayload).catch(notifyRequestError)
 }
 
 // 在后端切换 / 登出时丢弃订阅。
@@ -312,6 +377,8 @@ const runURLTest = async (outboundTag: string, timeout = speedtestTimeout.value)
   const client = getSingboxClient()?.client
   if (!client) return
 
+  if (groups.get(outboundTag)?.type === 'probe') return runProbe(outboundTag)
+
   // 先记下测速前的结果指纹，之后只有指纹变化才说明本次结果到了 —— 避免别处推送
   // 触发误判。组测速要等展开后的全部叶子，单测只等自身 tag。
   const targets = collectURLTestTargets(outboundTag)
@@ -345,6 +412,7 @@ export const proxiesDriver: ProxiesDriver = {
   fetch: async () => {
     ensureSession()
     if (ready) await ready
+    if (providersReady) await providersReady
 
     return applyPayload()
   },
@@ -382,14 +450,16 @@ export const proxiesDriver: ProxiesDriver = {
 
     const result: Record<string, number> = {}
     for (const item of groups.get(group)?.items ?? []) {
-      result[item.tag] = item.urlTestDelay
+      result[item.tag] = groups.get(group)?.probe
+        ? (item.probe?.ok ? Math.max(1, item.probe.firstByteMs) : 0)
+        : item.urlTestDelay
     }
 
     return result
   },
 
-  updateProvider: async () => {},
-  healthCheckProvider: async () => {},
+  updateProvider: refreshProvider,
+  healthCheckProvider,
   fetchSmartWeights: async () => ({}),
   flushSmartWeights: async () => {},
 }

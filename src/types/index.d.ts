@@ -1,5 +1,5 @@
 export * from './dae'
-import type { Connection as SingboxConnectionRawMessage } from '@/gen/daemon/started_service_pb'
+import type { Connection as SingboxConnectionRawMessage, ProbeGroup, ProbeReport } from '@/gen/daemon/started_service_pb'
 import type { DaeConnectionRawMessage } from './dae'
 
 export type BackendType = 'clash' | 'dae' | 'singbox'
@@ -64,6 +64,7 @@ export type Proxy = {
   icon: string
   hidden?: boolean
   selectable?: boolean
+  probe?: ProbeGroup & { reports: Record<string, ProbeReport> }
   testUrl?: string
   'dialer-proxy'?: string
   'provider-name'?: string
@@ -84,6 +85,9 @@ export type ProxyProvider = {
   testUrl: string
   updatedAt: string
   vehicleType: string
+  url?: string
+  canRefresh?: boolean
+  canHealthCheck?: boolean
 }
 
 export type Rule = {

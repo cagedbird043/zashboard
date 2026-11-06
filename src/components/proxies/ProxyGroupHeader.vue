@@ -19,7 +19,14 @@
       @mouseenter="showVisibilityTip"
       @toggle="handlerGroupToggle"
     />
+    <ProbeGroupStatus
+      v-if="proxyGroup.type.toLowerCase() === 'probe'"
+      :name="name"
+      :loading="isLatencyTesting"
+      @screen="emit('latency-test')"
+    />
     <LatencyTag
+      v-else
       :class="twMerge('bg-base-200/40 hover:bg-base-200/70')"
       :loading="isLatencyTesting"
       :name="proxyGroup.now"
@@ -56,6 +63,7 @@ import LatencyTag from './LatencyTag.vue'
 import ProxyGroupFilter from './ProxyGroupFilter.vue'
 import ProxyGroupNow from './ProxyGroupNow.vue'
 import ProxyName from './ProxyName.vue'
+import ProbeGroupStatus from './ProbeGroupStatus.vue'
 
 const props = defineProps<{
   name: string

@@ -24,7 +24,7 @@
 import { displayAllFeatures } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import { computed, ref } from 'vue'
-import { daeCapabilities } from './capabilities'
+import { daeCapabilities, singboxProviderCapabilities } from './capabilities'
 
 // usbip 需要 sing-box gRPC API v2(ProvideUSBDevices 流)
 const USBIP_MIN_API_VERSION = 2
@@ -245,6 +245,8 @@ const singboxCaps = computed<Caps>(() => {
 
     latencyTest: true,
     nodeLatencyTest: true,
+    proxyProviderUpdate: singboxProviderCapabilities.value.refresh,
+    proxyProviderHealthCheck: singboxProviderCapabilities.value.healthCheck,
     customTestUrl: true,
     connectionsClose: true,
     // sing-box API(getClashModeStatus / setClashMode)原生支持 clash mode。

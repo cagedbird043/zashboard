@@ -66,7 +66,9 @@ export default defineComponent({
       isUpgrading.value = true
       try {
         await Promise.all(
-          proxyProviederList.value.map((provider) => updateProxyProvider(provider.name)),
+          proxyProviederList.value
+            .filter((provider) => provider.canRefresh !== false && provider.vehicleType !== 'Inline')
+            .map((provider) => updateProxyProvider(provider.name)),
         )
         await fetchProxies()
         isUpgrading.value = false

@@ -1,6 +1,21 @@
 import type { LANG_MESSAGE } from './en'
 
 const zh: LANG_MESSAGE = {
+  probePassed: '合格',
+  probeFailed: '淘汰',
+  probeUntested: '未检测',
+  probeFirstByte: '首字节',
+  probeTransfer: '传输时间',
+  probeRatio: '传输 / 首字节',
+  probeRescreen: '重新筛选',
+  probeScreening: '筛选中',
+  probeUnsupported: '需要支持 probe 的新版核心',
+  probeKeepCurrent: '重新筛选共享节点池；当前节点合格就不切换。',
+  probeLastScreen: '上次节点池筛选',
+  subscriptionURL: '订阅链接',
+  showSubscriptionURL: '显示订阅链接',
+  hideSubscriptionURL: '隐藏订阅链接',
+  providerHealthCheck: '检测订阅节点',
   setup: '配置',
   overview: '概览',
   proxies: '代理',

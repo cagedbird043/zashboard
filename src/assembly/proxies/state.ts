@@ -90,9 +90,24 @@ const getTestUrlBucket = (groupName?: string) => {
 }
 
 export const latencyMapOf = (groupName?: MaybeRefOrGetter<string | undefined>) =>
-  computed(() => getLatencyMap(getTestUrlBucket(toValue(groupName))).value)
+  computed(() => {
+    const name = toValue(groupName)
+    const group = name ? proxyMap.value[name] : undefined
+    if (group?.probe) {
+      return new Map((group.all ?? []).map((tag) => {
+        const report = group.probe!.reports[tag]
+        return [tag, report?.ok ? Math.max(1, report.firstByteMs) : NOT_CONNECTED]
+      }))
+    }
+    return getLatencyMap(getTestUrlBucket(name)).value
+  })
 
 export const getLatencyByName = (proxyName: string, groupName?: string) => {
+  const probe = groupName ? proxyMap.value[groupName]?.probe : undefined
+  if (probe) {
+    const report = probe.reports[proxyName]
+    return report?.ok ? Math.max(1, report.firstByteMs) : NOT_CONNECTED
+  }
   return getLatencyMap(getTestUrlBucket(groupName)).value.get(proxyName) ?? NOT_CONNECTED
 }
 
