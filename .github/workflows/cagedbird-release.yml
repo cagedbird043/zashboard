@@ -1,14 +1,10 @@
 name: Build and Release
 
 on:
-  push:
-    branches:
-      - singbox
-  # 允许在 Actions 页面点 "Run workflow" 手动发一次(不必空 push)。
   workflow_dispatch:
 
-# 同一分支的发布串行执行:两次 push 挨得近时,后一次要能看见前一次建好的 tag,
-# 才能算出正确的 -singbox.N。
+# 发布只由显式手动触发；普通 push 仅运行 cagedbird-ci.yml。
+# 发布串行执行，以读取上一次创建的 tag 并递增 -singbox.N。
 concurrency:
   group: release-singbox
   cancel-in-progress: false

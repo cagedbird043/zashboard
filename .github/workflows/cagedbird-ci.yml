@@ -1,0 +1,98 @@
+name: Cagedbird CI
+
+on:
+  push:
+    branches:
+      - singbox
+      - 'cagedbird/candidate-*'
+  pull_request:
+    branches:
+      - singbox
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cagedbird-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUSKY: '0'
+
+jobs:
+  checks:
+    name: Typecheck, lint and browser checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm type-check
+      - name: Lint without modifying files
+        run: pnpm exec eslint .
+      - name: Build all-fonts distribution
+        run: pnpm build
+      - name: Set up Chrome
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+          install-dependencies: true
+      - name: Use a deterministic browser language
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          wrapper="$RUNNER_TEMP/zashboard-chrome"
+          printf '#!/usr/bin/env bash\nexec %q --lang=en-US --accept-lang=en-US "$@"\n' "$CHROME_PATH" > "$wrapper"
+          chmod +x "$wrapper"
+          echo "CHROME_BIN=$wrapper" >> "$GITHUB_ENV"
+      - name: Proxy behavior smoke
+        run: pnpm test:verify
+      - name: Backend setup smoke
+        run: pnpm test:setup
+      - name: Collapse lifecycle smoke
+        run: node test/collapse.mjs
+      - name: Upload all-fonts distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: zashboard-all
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  fonts:
+    name: Build (${{ matrix.font }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        font: [cdn, firasans, misans, pingfang, sarasa, none]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build font variant
+        env:
+          FONT: ${{ matrix.font }}
+        run: pnpm build
+      - name: Upload distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: zashboard-${{ matrix.font }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

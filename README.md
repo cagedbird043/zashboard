@@ -43,6 +43,13 @@ probe 结果与订阅链接需要支持相应 API 字段的 cagedbird 核心。�
 - 每个主题提交必须能单独通过类型检查和生产构建；最终用真实核心验收 probe、订阅刷新、日志、连接及移动布局。验收后再晋升工作分支，推送使用 `git push --force-with-lease=refs/heads/singbox:<记录的旧SHA> origin singbox:refs/heads/singbox`，不移动已发布 tag。
 - 仓库历史整理和公网部署分开执行。静态构建验收通过后才部署，保留上一版 release 目录以便回滚；不自动变基、自动部署或修改客户端核心。
 
+### CI
+
+推送到 `singbox`、`cagedbird/candidate-*`，或提交面向 `singbox` 的 PR 时运行 **Cagedbird CI**，也可手动运行。使用 Node.js 24 和 `packageManager` 锁定的 pnpm，冻结安装依赖，执行类型检查、只读 ESLint、生产构建，以及真实 headless Chrome 的代理行为、自动连接与折叠生命周期验收。浏览器固定为英语，避免系统语言影响测试选择器。
+
+CI 构建全部七种字体变体，产物保存在 Actions artifacts 14 天，不创建 Release、不部署公网面板。`cagedbird-release.yml` 仅允许显式手动触发发布；原作者工作流保持不变。
+
+
 
 ## **Download**
 
