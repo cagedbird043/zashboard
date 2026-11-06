@@ -24,9 +24,9 @@
       >
     </div>
 
-    <div class="flex h-4 w-full items-center justify-between">
+    <div class="flex min-h-4 w-full flex-wrap items-center justify-between gap-x-2 gap-y-1">
       <span
-        :class="`truncate text-xs tracking-tight ${active ? 'text-primary-content' : 'text-base-content/60'}`"
+        :class="`min-w-0 truncate text-xs tracking-tight ${active ? 'text-primary-content' : 'text-base-content/60'}`"
         @mouseenter="checkTruncation"
       >
         {{ typeDescription }}

@@ -1,12 +1,15 @@
 <template>
   <span
-    class="shrink-0 rounded px-1.5 text-xs tabular-nums"
+    class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1 rounded px-1.5 text-xs tabular-nums"
     :class="active ? 'text-primary-content' : report ? (report.ok ? 'text-success' : 'text-error') : 'text-base-content/50'"
     @mouseenter="showDetails"
     @click.stop="showDetails"
   >
-    {{ report ? t(report.ok ? 'probePassed' : 'probeFailed') : t('probeUntested') }}
-    <template v-if="report && !report.error"> · {{ report.firstByteMs }}ms<span v-if="!probe?.url"> · {{ report.ratio.toFixed(2) }}×</span></template>
+    <span class="whitespace-nowrap">{{ report ? t(report.ok ? 'probePassed' : 'probeFailed') : t('probeUntested') }}</span>
+    <template v-if="report && !report.error">
+      <span class="whitespace-nowrap">· {{ report.firstByteMs }}ms</span>
+      <span v-if="!probe?.url" class="whitespace-nowrap">· {{ report.ratio.toFixed(2) }}×</span>
+    </template>
   </span>
 </template>
 
