@@ -1,6 +1,11 @@
 # Changelog
 
-# Changelog
+## cagedbird 未发布
+
+- 原生 sing-box probe 结果、按组隔离的检测状态与共享重新筛选；不再将 probe 操作当作 urltest。
+- 接入原生 ProviderService：订阅列表、节点、流量、到期时间、刷新和健康检查；订阅链接默认隐藏，可查看和复制。
+- 不允许对自动分组进行前端乐观手选；筛选中断时结束等待并报告错误。
+- 直接跟随原作者版本维护线性主题补丁栈；分离 sing-box 能力、翻译、probe 和订阅界面，缩小共享文件的变基冲突面。
 
 ## [3.30.0](https://github.com/Zephyruso/zashboard/compare/v3.29.1...v3.30.0) (2026-10-28)
 

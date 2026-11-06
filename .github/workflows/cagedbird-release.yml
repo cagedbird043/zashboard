@@ -1,0 +1,88 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - singbox
+  # 允许在 Actions 页面点 "Run workflow" 手动发一次(不必空 push)。
+  workflow_dispatch:
+
+# 同一分支的发布串行执行:两次 push 挨得近时,后一次要能看见前一次建好的 tag,
+# 才能算出正确的 -singbox.N。
+concurrency:
+  group: release-singbox
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # 需要全部 tag 才能算出下一个 -singbox.N。
+          fetch-depth: 0
+
+      # vX.Y.Z 取 singbox 分支里同步自上游的 package.json 版本;X.Y.Z 不变时
+      # -singbox.N 递增。
+      - name: Compute release tag
+        id: version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          escaped=${version//./\\.}
+          latest=$(git tag -l "v${version}-singbox.*" \
+            | sed -E "s/^v${escaped}-singbox\.([0-9]+)$/\1/" \
+            | sort -n \
+            | tail -n 1)
+          next=$(( ${latest:-0} + 1 ))
+          tag="v${version}-singbox.${next}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag"
+
+      # 先把 release 建好(tag 指向本次 push),后面各矩阵任务只往上挂附件,
+      # 免得 7 个构建同时创建同一个 release 抢跑。
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+
+  release-dist:
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each font variant is published as its own zip asset.
+        font:
+          - { key: all, suffix: '' }
+          - { key: cdn, suffix: '-cdn-fonts' }
+          - { key: firasans, suffix: '-firasans-only' }
+          - { key: misans, suffix: '-misans-only' }
+          - { key: pingfang, suffix: '-pingfang-only' }
+          - { key: sarasa, suffix: '-sarasa-only' }
+          - { key: none, suffix: '-no-fonts' }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+      - uses: pnpm/action-setup@v6
+
+      - name: Build and Zip the dist folder
+        env:
+          FONT: ${{ matrix.font.key }}
+        run: |
+          pnpm i
+          pnpm run build
+          zip -r dist${{ matrix.font.suffix }}.zip dist
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: dist${{ matrix.font.suffix }}.zip
+          tag_name: ${{ needs.version.outputs.tag }}
