@@ -23,7 +23,7 @@ env:
 jobs:
   checks:
     name: Typecheck, lint and browser checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
@@ -40,18 +40,13 @@ jobs:
         run: pnpm exec eslint .
       - name: Build all-fonts distribution
         run: pnpm build
-      - name: Set up Chrome
-        id: chrome
-        uses: browser-actions/setup-chrome@v2
-        with:
-          chrome-version: stable
-          install-dependencies: true
-      - name: Use a deterministic browser language
-        env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Verify sandboxed Chrome and fix browser language
         run: |
+          chrome_path=$(command -v google-chrome)
+          "$chrome_path" --version
+          "$chrome_path" --headless=new --dump-dom about:blank
           wrapper="$RUNNER_TEMP/zashboard-chrome"
-          printf '#!/usr/bin/env bash\nexec %q --lang=en-US --accept-lang=en-US "$@"\n' "$CHROME_PATH" > "$wrapper"
+          printf '#!/usr/bin/env bash\nexec %q --lang=en-US --accept-lang=en-US "$@"\n' "$chrome_path" > "$wrapper"
           chmod +x "$wrapper"
           echo "CHROME_BIN=$wrapper" >> "$GITHUB_ENV"
       - name: Proxy behavior smoke
@@ -61,7 +56,7 @@ jobs:
       - name: Collapse lifecycle smoke
         run: node test/collapse.mjs
       - name: Upload all-fonts distribution
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: zashboard-all
           path: dist/
@@ -70,7 +65,7 @@ jobs:
 
   fonts:
     name: Build (${{ matrix.font }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -90,7 +85,7 @@ jobs:
           FONT: ${{ matrix.font }}
         run: pnpm build
       - name: Upload distribution
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: zashboard-${{ matrix.font }}
           path: dist/
