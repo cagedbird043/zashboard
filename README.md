@@ -56,8 +56,8 @@ CI 构建全部七种字体变体，完整性清单和提交 SHA 随产物保存
 - **Cagedbird Upstream Sync** 每天 UTC 03:17、15:17 检查原作者严格的 `v主版本.次版本.补丁版本` tag，也可手动运行。只接受比已记录基线更新、且继承该基线的正式版本；预发布、移动过的基线 tag、非线性补丁栈或未知历史漂移均停止。
 - 变基在隔离工作树进行，不自动解决代码冲突，也不自动丢弃代码补丁。仅移除旧的纯基线元数据提交，再写入本轮基线；冲突不修改 `singbox`。候选推送、完整 CI、旧 SHA 租约晋升依次执行，任一步失败都不继续上线；从 Actions 失败通知查看原因。
 - 晋升后直接部署候选 CI 验收的同一份产物，不在服务器重新构建。我们自己的 `singbox` push 也使用相同部署流程。同步用仓库写入密钥，部署用另一把专用密钥，两者隔离。
-- bj-edge 的 `board-deploy` 无 sudo 权限；SSH 公钥只能执行限定的 rsync 接收和版本切换协议。部署固定主机公钥，不使用 `StrictHostKeyChecking=no`。生产环境只允许 `singbox` 分支。
-- rsync 只写 `/srv/zashboard/incoming/<完整SHA>/`，`--delete` 不作用于在线目录。服务器校验整份文件清单，拒绝额外文件和软链，确认远端 `singbox` 仍指向该 SHA 后，转存 `releases/<SHA>` 并原子切换 `current`。
+- bj-edge 的 `board-deploy` 无 sudo 权限；SSH 公钥只能执行限定的产物获取、状态查询和版本切换协议。部署固定主机公钥，不使用 `StrictHostKeyChecking=no`。生产环境只允许 `singbox` 分支。
+- CI 验证指定运行的唯一 `zashboard-all` 产物，并通过 SSH stdin 传递短期签名 URL、长度和 SHA256；服务器不持有 GitHub token。服务器仅从固定 GitHub 产物存储域名拉取已构建 ZIP，分段与整包校验后安全解包到 `/srv/zashboard/incoming/<完整SHA>/`，校验清单、拒绝额外文件和软链，确认远端 `singbox` 仍指向该 SHA 后，转存 `releases/<SHA>` 并原子切换 `current`。
 - 切换后通过带真实域名与 TLS 校验的本机 HTTPS 请求核对版本、入口和资源；失败自动恢复旧链接。切换和检查由服务器单次命令在锁内完成，CI 断线也不依赖后续 SSH 才能回滚。保留当前、前一版及最近版本，未知命名的历史目录不自动删除。
 - 仓库变量：`BOARD_DEPLOY_HOST`、`BOARD_DEPLOY_PORT`；Secrets：`UPSTREAM_SYNC_SSH_KEY`、`BOARD_DEPLOY_SSH_KEY`、`BOARD_DEPLOY_KNOWN_HOSTS`。凭据不进入构建、PR 和原生验收步骤。线上 [`/release.json`](https://board.cagedbird.cn/release.json) 可查询部署提交。
 

@@ -27,7 +27,8 @@ def descriptor(run_id, commit):
     artifacts = [item for item in artifacts if item["name"] == "zashboard-all" and not item["expired"]]
     release["require"](len(artifacts) == 1, "expected one unexpired all-fonts artifact")
     artifact = artifacts[0]
-    release["require"](artifact["workflow_run"]["head_sha"] == commit and str(artifact["workflow_run"]["id"]) == run_id, "artifact run/commit mismatch")
+    # Sync runs execute at the source head; the sealed manifest binds the candidate commit.
+    release["require"](str(artifact["workflow_run"]["id"]) == run_id, "artifact run mismatch")
     digest = artifact["digest"]
     release["require"](isinstance(digest, str) and digest.startswith("sha256:"), "missing artifact SHA256")
     request = urllib.request.Request(f"{API}/actions/artifacts/{artifact['id']}/zip", headers=headers)
