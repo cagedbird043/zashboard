@@ -1,37 +1,15 @@
-// 组装层 · 后端判别与能力表。
-//
-// 判别轴:
-//   core —— 运行时内核品牌。靠 /version 字符串嗅探得来,是启发式猜测,
-//           可能误判(分支核 / 兼容核),且拉取完成前为 'unknown'。
-//   apiVersion —— sing-box gRPC API 版本,仅在 type === 'singbox' 时由版本探测写入。
-//
-// 实际在用的 API 形态:
-//   A. clash 通道 + core=mihomo   mihomo 的 Clash API
-//   B. clash 通道 + core=singbox  sing-box 的 Clash 兼容 API(端点子集 + 少量专属端点)
-//   C. clash 通道 + core=honk     honk 的 Clash 兼容 API(又一个端点子集)
-//   D. singbox 通道 + core=singbox sing-box API(gRPC)
-//   E. dae 通道                    dae 的原生 API(能力由 /capabilities 资源表给出)
-//
-// 能力表一律通过 can() 读取:
-//   soft —— 由 core / 后端类型 / apiVersion 决定。因探测是启发式,Clash 通道上的
-//           非 mihomo 内核允许用户用 displayAllFeatures 强制掰开(提示文案承诺:
-//           fork 版内核可能支持官方版没有的功能)。
-//
-// 注意:能凭响应数据自证的差异(如 rules 开关端点由 rule.uuid 决定、smart 由
-// proxy.type 决定)不进此表,就近放在对应的 assembly 子模块里 —— 数据比版本
-// 字符串可靠,不该被降级成全局猜测。
+// 后端判别与公共能力表；sing-box 专属能力和版本门槛位于 singbox/capabilities。
+// 能从响应数据自证的差异由对应的 assembly 子模块处理，不依赖内核版本猜测。
 
 import { displayAllFeatures } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import { computed, ref } from 'vue'
 import { daeCapabilities, singboxProviderCapabilities } from './capabilities'
-
-// usbip 需要 sing-box gRPC API v2(ProvideUSBDevices 流)
-const USBIP_MIN_API_VERSION = 2
-// OpenVPN 需要 sing-box gRPC API v3(SubscribeOpenVPNStatus 流)
-const OPENVPN_MIN_API_VERSION = 3
-// Taildrop 需要 sing-box gRPC API v4(SubscribeTaildropInbox / SendTaildropFiles 等)
-const TAILDROP_MIN_API_VERSION = 4
+import {
+  getSingboxCapabilities,
+  getSingboxClashCapabilities,
+  type SingboxCap,
+} from './singbox/capabilities'
 
 export enum Core {
   Mihomo = 'mihomo',
@@ -80,9 +58,7 @@ export type Cap =
   | 'independentLatency'
   | 'coreUpdateCheck'
   | 'configPatch'
-  // clash mode 选择器:只要后端能报出 mode / mode-list 就显示,与
-  // PATCH /configs 的端口 / tun 配置块无关(见 ProxiesCtrl 的 modeSelect)。
-  | 'clashMode'
+  | SingboxCap
   | 'traceLogLevel'
   | 'silentLogLevel'
   | 'runtimeStats'
@@ -113,22 +89,6 @@ export type Cap =
   | 'entryManage'
   | 'groupConfigPatch'
   | 'lifecycleControl'
-  // ---------- sing-box 专属 ----------
-  // sing-box 内核(无论走 gRPC 还是 Clash 兼容通道)的能力
-  | 'customGlobalNode'
-  | 'logTypeFilter'
-  | 'logConnectionDetail'
-  | 'disconnectOnModeChange'
-  | 'extraLogLevels'
-  // 仅 sing-box API(gRPC)通道
-  | 'tools'
-  | 'goroutines'
-  | 'startedAt'
-  | 'usbip'
-  | 'openvpn'
-  | 'taildrop'
-  // 路由可见性(规则页在 sing-box 上没有意义)
-  | 'rules'
 
 type Caps = Partial<Record<Cap, boolean>>
 
@@ -149,13 +109,9 @@ const clashCaps = computed<Caps>(() => {
     independentLatency: mihomoOrForkCore,
     coreUpdateCheck: mihomo,
     configPatch: mihomo,
-    // Clash 通道上 /configs 一律带回 mode,选择器照旧常显(含 sing-box 兼容核)。
-    clashMode: true,
 
     // sing-box 与 honk 有 trace,mihomo 没有
     traceLogLevel: honk || singboxCore,
-    // fatal / panic 仅 sing-box
-    extraLogLevels: singboxCore,
     // silent:mihomo 与 sing-box 有,honk 没有
     silentLogLevel: mihomo || singboxCore,
 
@@ -172,16 +128,7 @@ const clashCaps = computed<Caps>(() => {
     customTestUrl: true,
     nodeLatencyTest: true,
 
-    // ---------- sing-box 内核侧(Clash 兼容通道) ----------
-    customGlobalNode: singboxCore,
-    // sing-box 日志 payload 带 "[type]:" 前缀,可据此做类型分面过滤
-    logTypeFilter: singboxCore,
-    // sing-box 日志以 "[连接id 耗时]" 开头,可据此从日志跳到对应连接
-    logConnectionDetail: singboxCore,
-    // sing-box 切换模式后需要主动断开命中 clash_mode 规则的连接
-    disconnectOnModeChange: singboxCore,
-
-    rules: true,
+    ...getSingboxClashCapabilities(singboxCore),
   }
 })
 
@@ -226,35 +173,9 @@ const daeCaps = computed<Caps>(() => {
   }
 })
 
-const singboxCaps = computed<Caps>(() => {
-  return {
-    tools: true,
-    goroutines: true,
-    startedAt: true,
-    usbip: apiVersion.value >= USBIP_MIN_API_VERSION,
-    openvpn: apiVersion.value >= OPENVPN_MIN_API_VERSION,
-    taildrop: apiVersion.value >= TAILDROP_MIN_API_VERSION,
-
-    customGlobalNode: true,
-    logTypeFilter: true,
-    logConnectionDetail: true,
-    disconnectOnModeChange: true,
-    extraLogLevels: true,
-    traceLogLevel: true,
-    silentLogLevel: true,
-
-    latencyTest: true,
-    nodeLatencyTest: true,
-    proxyProviderUpdate: singboxProviderCapabilities.value.refresh,
-    proxyProviderHealthCheck: singboxProviderCapabilities.value.healthCheck,
-    customTestUrl: true,
-    connectionsClose: true,
-    // sing-box API(getClashModeStatus / setClashMode)原生支持 clash mode。
-    clashMode: true,
-
-    rules: false,
-  }
-})
+const singboxCaps = computed<Caps>(() =>
+  getSingboxCapabilities(apiVersion.value, singboxProviderCapabilities.value),
+)
 
 const soft = computed<Caps>(() => {
   switch (activeBackend.value?.type) {
