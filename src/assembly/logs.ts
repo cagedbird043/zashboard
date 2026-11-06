@@ -1,5 +1,6 @@
 import { useStorage } from '@/composables/use-storage'
 import { LOG_LEVEL } from '@/constant'
+import { stripAnsi } from '@/helper/ansi'
 import { logRetentionLimit, sourceIPLabelList } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Log, LogWithSeq } from '@/types'
@@ -17,6 +18,7 @@ export const supportedLogLevels = computed(() => {
   const levels = [LOG_LEVEL.Debug, LOG_LEVEL.Info, LOG_LEVEL.Warning, LOG_LEVEL.Error]
 
   if (can('traceLogLevel')) levels.unshift(LOG_LEVEL.Trace)
+  if (can('extraLogLevels')) levels.push(LOG_LEVEL.Fatal, LOG_LEVEL.Panic)
   if (can('silentLogLevel')) levels.push(LOG_LEVEL.Silent)
 
   return levels
@@ -82,6 +84,7 @@ export const initLogs = () => {
       pending.unshift({
         ...data,
         payload,
+        visiblePayload: stripAnsi(payload),
         time: dayjs().format('HH:mm:ss'),
         seq: seq++,
       })
