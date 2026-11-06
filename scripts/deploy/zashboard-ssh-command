@@ -1,0 +1,15 @@
+#!/usr/bin/python3 -I
+"""Install root-owned, mode 0755; authorized_keys: restrict,command=\"/usr/local/libexec/zashboard-ssh-command\"."""
+import json
+import os
+import runpy
+import subprocess
+import sys
+
+try:
+    release = runpy.run_path("/usr/local/libexec/zashboard-release.py")
+    result = release["dispatch"](os.environ.get("SSH_ORIGINAL_COMMAND", ""))
+    if result is not None:
+        print(json.dumps(result, sort_keys=True))
+except (ValueError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+    sys.exit(str(error))
