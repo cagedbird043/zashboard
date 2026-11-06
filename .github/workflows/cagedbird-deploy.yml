@@ -62,19 +62,27 @@ jobs:
           cat > "$HOME/.ssh/config" <<EOF
           Host board-production
             HostName $DEPLOY_HOST
-            Port $DEPLOY_PORT
+            Port ${DEPLOY_PORT:-22}
             User board-deploy
             IdentityFile $HOME/.ssh/board-deploy
             IdentitiesOnly yes
             BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 15
+            ServerAliveCountMax 3
             StrictHostKeyChecking yes
             UserKnownHostsFile $HOME/.ssh/board-known-hosts
           EOF
           chmod 600 "$HOME/.ssh/config" "$HOME/.ssh/board-known-hosts"
-      - name: Upload, atomically activate and verify HTTPS
+      - name: Fetch validated artifact, atomically activate and verify HTTPS
         env:
           DEPLOY_COMMIT: ${{ inputs.commit }}
-        run: bash scripts/deploy/deploy.sh "$RUNNER_TEMP/board-dist" "$DEPLOY_COMMIT" board-production
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ inputs.artifact-run-id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/deploy/artifact.py "$ARTIFACT_RUN_ID" "$DEPLOY_COMMIT" |
+            bash scripts/deploy/deploy.sh "$RUNNER_TEMP/board-dist" "$DEPLOY_COMMIT" board-production
       - name: Record the deployed commit
         env:
           DEPLOY_COMMIT: ${{ inputs.commit }}

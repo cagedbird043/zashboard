@@ -5,11 +5,12 @@ import os
 import runpy
 import subprocess
 import sys
+import zipfile
 
 try:
     release = runpy.run_path("/usr/local/libexec/zashboard-release.py")
     result = release["dispatch"](os.environ.get("SSH_ORIGINAL_COMMAND", ""))
     if result is not None:
         print(json.dumps(result, sort_keys=True))
-except (ValueError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+except (ValueError, OSError, RuntimeError, subprocess.SubprocessError, zipfile.BadZipFile) as error:
     sys.exit(str(error))

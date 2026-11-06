@@ -3,14 +3,18 @@
 
 Local/CI CLI: seal DIST SHA | verify DIST SHA.
 Server CLI (administrative/testing only): [--root DIR] [--url URL]
-[--resolve HOST:PORT:IP] [--head-url URL] prepare SHA | activate SHA | status.
+[--resolve HOST:PORT:IP] [--head-url URL] fetch SHA | activate SHA | status.
 The SSH wrapper exposes no configuration arguments. Production configuration is
 /etc/zashboard-release.json (root-owned, not group/world writable), with optional
 root, url, resolve, head_url keys. Defaults target /srv/zashboard, local HTTPS,
 and the public GitHub singbox branch ref (checked fail-closed before switching).
+CI sends a short-lived artifact descriptor over SSH stdin, never a GitHub token.
+The server downloads one bounded ZIP in eight HTTPS ranges, verifies its digest,
+then checks the sealed manifest before staging. No source or build runs here.
 """
 import argparse
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import hashlib
 from html.parser import HTMLParser
@@ -23,13 +27,18 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 from urllib.parse import unquote, urlsplit, quote
 import uuid
+import zipfile
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 LEGACY = "cb8e896"
 CONFIG = Path("/etc/zashboard-release.json")
 DEFAULTS = {"root": "/srv/zashboard", "url": "https://board.cagedbird.cn", "resolve": "board.cagedbird.cn:443:127.0.0.1", "head_url": "https://api.github.com/repos/cagedbird043/zashboard/git/ref/heads/singbox"}
+MAX_ARCHIVE = 64 * 1024 * 1024
+MAX_UNPACKED = 128 * 1024 * 1024
+ARTIFACT_HOST = re.compile(r"productionresultssa[0-9]+\.blob\.core\.windows\.net\Z")
 
 
 def require(condition, message):
@@ -40,6 +49,51 @@ def require(condition, message):
 def sha_value(value):
     require(isinstance(value, str) and SHA.fullmatch(value), "expected lowercase 40-character commit SHA")
     return value
+
+
+def artifact_descriptor(data):
+    require(len(data) <= 16384, "artifact descriptor too large")
+    value = json.loads(data)
+    require(isinstance(value, dict) and set(value) == {"url", "size", "sha256"}, "invalid artifact descriptor")
+    require(type(value["size"]) is int and 0 < value["size"] <= MAX_ARCHIVE, "invalid archive size")
+    require(isinstance(value["sha256"], str) and re.fullmatch(r"[0-9a-f]{64}", value["sha256"]), "invalid archive digest")
+    require(isinstance(value["url"], str) and not any(ord(c) <= 32 or ord(c) == 127 for c in value["url"]), "invalid artifact URL")
+    url = urlsplit(value["url"])
+    require(url.scheme == "https" and ARTIFACT_HOST.fullmatch(url.netloc) and url.path.startswith("/actions-results/") and url.path.endswith(".zip") and url.query and not url.fragment, "untrusted artifact URL")
+    return value
+
+
+def download_artifact(descriptor, destination):
+    # One CI ZIP only. Independent ranges avoid a single lossy Azure-to-China
+    # TCP stream determining deployment time; redirects are deliberately refused.
+    size = descriptor["size"]
+    count = min(8, size)
+    with tempfile.TemporaryDirectory(prefix=".ranges-", dir=destination.parent) as temporary:
+        root = Path(temporary)
+
+        def chunk(index):
+            low, high = size * index // count, size * (index + 1) // count - 1
+            body, headers = root / str(index), root / (str(index) + ".headers")
+            command = ["/usr/bin/curl", "--fail", "--silent", "--show-error", "--noproxy", "*", "--proto", "=https", "--connect-timeout", "10", "--max-time", "120", "--max-filesize", str(high - low + 1), "--range", f"{low}-{high}", "--dump-header", str(headers), "--output", str(body), "--config", "-"]
+            result = subprocess.run(command, input="url = " + json.dumps(descriptor["url"]) + "\n", text=True, capture_output=True)
+            require(result.returncode == 0, "artifact range download failed")
+            response = headers.read_text(encoding="iso-8859-1").lower().splitlines()
+            require(response and re.fullmatch(r"http/\S+ 206(?: .*)?", response[0]), "artifact server must return partial content without redirect")
+            ranges = [line.partition(":")[2].strip() for line in response if line.startswith("content-range:")]
+            require(ranges == [f"bytes {low}-{high}/{size}"], "artifact Content-Range mismatch")
+            require(body.stat().st_size == high - low + 1, "artifact range size mismatch")
+            return body
+
+        with ThreadPoolExecutor(max_workers=count) as pool:
+            chunks = list(pool.map(chunk, range(count)))
+        digest = hashlib.sha256()
+        with destination.open("xb") as output:
+            for path in chunks:
+                with path.open("rb") as source:
+                    while data := source.read(65536):
+                        output.write(data)
+                        digest.update(data)
+        require(destination.stat().st_size == size and digest.hexdigest() == descriptor["sha256"], "artifact archive size/hash mismatch")
 
 
 def safe_name(name):
@@ -175,12 +229,42 @@ class Releases:
         finally:
             temp.unlink(missing_ok=True)
 
-    def prepare(self, commit):
+    def install_archive(self, archive, commit):
         sha_value(commit)
-        path = self.root / "incoming" / commit
-        path.mkdir(exist_ok=True)
-        directory(path)
-        return {"prepared": commit}
+        with tempfile.TemporaryDirectory(prefix=".extract-", dir=self.root / "incoming") as temporary:
+            unpacked = Path(temporary) / "release"
+            unpacked.mkdir()
+            with zipfile.ZipFile(archive) as package:
+                items = package.infolist()
+                require(0 < len(items) <= 10000 and sum(item.file_size for item in items) <= MAX_UNPACKED, "artifact unpacked size/count exceeded")
+                names = set()
+                for item in items:
+                    name = safe_name(item.filename.rstrip("/") if item.is_dir() else item.filename)
+                    require(name not in names, "duplicate ZIP path")
+                    names.add(name)
+                    mode = stat.S_IFMT(item.external_attr >> 16)
+                    require(mode in (0, stat.S_IFDIR if item.is_dir() else stat.S_IFREG) and not item.flag_bits & 1, "non-regular/encrypted ZIP entry")
+                    path = unpacked / name
+                    if item.is_dir():
+                        path.mkdir(parents=True, exist_ok=True)
+                    else:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        with package.open(item) as source, path.open("xb") as output:
+                            shutil.copyfileobj(source, output, 65536)
+            verify(unpacked, commit)
+            stage = self.root / "incoming" / commit
+            if stage.exists() or stage.is_symlink():
+                directory(stage)
+                inventory(stage)
+                shutil.rmtree(stage)
+            unpacked.rename(stage)
+        return {"staged": commit}
+
+    def fetch_artifact(self, commit, descriptor):
+        with tempfile.TemporaryDirectory(prefix=".artifact-", dir=self.root / "incoming") as temporary:
+            archive = Path(temporary) / "artifact.zip"
+            download_artifact(descriptor, archive)
+            return self.install_archive(archive, commit)
 
     def snapshot(self, target):
         root = self.root / target
@@ -280,35 +364,19 @@ def ignore_disconnect():
         signal.signal(sig, signal.SIG_IGN)
 
 
-def upload_command(command):
-    # Only the receiver shape emitted by deploy.sh. No path-bearing options,
-    # protected arguments, sender, devices, backups, shell syntax or extra paths.
-    match = re.fullmatch(r"rsync --server (-[a-zA-Z0-9.]+) --delete --safe-links \. ([0-9a-f]{40})/", command)
-    require(match is not None, "SSH command denied")
-    options, commit = match.groups()
-    require(re.fullmatch(r"-logDtprze\.[iLsfxCIvu]+", options), "rsync options denied")
-    return commit
-
-
 def dispatch(command, server=None):
     server = server or production()
     if command == "status":
         with server.lock():
             return server.status()
-    match = re.fullmatch(r"(prepare|activate) ([0-9a-f]{40})", command)
-    if match:
-        ignore_disconnect()
-        with server.lock():
-            return getattr(server, match[1])(match[2])
-    commit = upload_command(command)
-    ignore_disconnect()  # retain the lock until the receiver sees transport EOF
+    match = re.fullmatch(r"(fetch|activate) ([0-9a-f]{40})", command)
+    require(match is not None, "SSH command denied")
+    descriptor = artifact_descriptor(sys.stdin.buffer.read(16385)) if match[1] == "fetch" else None
+    ignore_disconnect()
     with server.lock():
-        stage = server.root / "incoming" / commit
-        directory(stage)  # prepare must precede upload; never follow a staging link
-        inventory(stage)  # reject any pre-existing symlink/special entry
-        environment = {"PATH": "/usr/bin:/bin", "HOME": str(server.root), "SSH_ORIGINAL_COMMAND": command.rsplit(" ", 1)[0] + " ./"}
-        subprocess.run(["/usr/bin/rrsync", "-wo", "-munge", str(stage)], env=environment, check=True)
-    return None
+        if descriptor is not None:
+            return server.fetch_artifact(match[2], descriptor)
+        return server.activate(match[2])
 
 
 def main():
@@ -316,7 +384,7 @@ def main():
     parser.add_argument("--root", default=DEFAULTS["root"])
     parser.add_argument("--url", default=DEFAULTS["url"])
     parser.add_argument("--resolve", default=DEFAULTS["resolve"])
-    parser.add_argument("command", choices=("seal", "verify", "prepare", "activate", "status"))
+    parser.add_argument("command", choices=("seal", "verify", "fetch", "activate", "status"))
     parser.add_argument("--head-url", default=DEFAULTS["head_url"])
     parser.add_argument("args", nargs="*")
     args = parser.parse_args()
@@ -328,12 +396,12 @@ def main():
         ignore_disconnect()
         server = Releases(args.root, args.url, args.resolve, args.head_url)
         with server.lock():
-            result = getattr(server, args.command)(*args.args)
+            result = server.fetch_artifact(args.args[0], artifact_descriptor(sys.stdin.buffer.read(16385))) if args.command == "fetch" else getattr(server, args.command)(*args.args)
     print(json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":
     try:
         main()
-    except (ValueError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+    except (ValueError, OSError, RuntimeError, subprocess.SubprocessError, zipfile.BadZipFile) as error:
         sys.exit(str(error))

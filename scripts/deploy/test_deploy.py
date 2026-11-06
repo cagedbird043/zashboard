@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Real filesystem + HTTP + rsync protocol checks; python3 scripts/deploy/test_deploy.py."""
+"""Real filesystem + HTTP + sealed ZIP protocol checks; python3 scripts/deploy/test_deploy.py."""
 import functools
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import zipfile
 
 SCRIPT = Path(__file__).resolve()
 RELEASE = SCRIPT.with_name("zashboard-release.py")
@@ -20,28 +21,24 @@ API = runpy.run_path(str(RELEASE))
 A, B = "a" * 40, "b" * 40
 
 
-# Used as a real rsync remote shell; no SSH daemon or privileges are needed.
-if len(sys.argv) > 1 and sys.argv[1] == "--receiver":
-    root = sys.argv[2]
-    command = shlex.join(sys.argv[4:])  # skip the SSH hostname
-    try:
-        API["dispatch"](command, API["Releases"](root, "http://127.0.0.1", ""))
-    except Exception as error:
-        print(f"receiver rejected {command!r}: {error}", file=sys.stderr)
-        sys.exit(1)
-    sys.exit(0)
-
 if len(sys.argv) > 1 and sys.argv[1] == "--client-ssh":
     root, url = sys.argv[2:4]
     args = sys.argv[4:]
-    while args and args[0] == "-o":
-        args = args[2:]
+    while args and args[0] in ("-o", "-n"):
+        args = args[2:] if args[0] == "-o" else args[1:]
     args = args[1:]  # SSH config target
     command = args[0] if len(args) == 1 else shlex.join(args)
     with (Path(root) / "ssh-audit").open("a") as audit:
         audit.write(command + "\n")
     try:
-        API["dispatch"](command, API["Releases"](root, url, "", url + "/head"))
+        server = API["Releases"](root, url, "", url + "/head")
+        if command == "fetch " + A:
+            # The SSH boundary is local in this integration test; the real
+            # HTTPS range downloader is exercised separately in test_artifact.py.
+            with server.lock():
+                server.install_archive(Path(sys.stdin.readline().strip()), A)
+        else:
+            API["dispatch"](command, server)
     except Exception as error:
         sys.exit(str(error))
     sys.exit(0)
@@ -235,22 +232,28 @@ class DeploymentChecks(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.server.status()
 
-    def test_dispatcher_denies_shell_sender_and_outside_upload(self):
-        valid = f"rsync --server -logDtprze.iLsfxCIvu --delete --safe-links . {A}/"
-        for command in ("", "sh", "status; id", "status extra", f"activate {A}; id", f"activate {A} --root /", f"prepare {A}/../", valid.replace("--server", "--server --sender"), valid.replace(A + "/", "../"), valid.replace(A + "/", "/srv/other/"), valid.replace(A + "/", A + "/../"), valid.replace("--delete", "--delete --temp-dir=/tmp")):
+    def test_dispatcher_denies_shell_rsync_and_outside_fetch(self):
+        for command in ("", "sh", "status; id", "status extra", f"activate {A}; id", f"activate {A} --root /", f"fetch {A}/../", f"fetch {A} --url https://example.com", f"prepare {A}", f"rsync --server -logDtprze.iLsfxCIvu --delete --safe-links . {A}/"):
             with self.subTest(command=command), self.assertRaises(ValueError):
                 API["dispatch"](command, self.server)
         self.assertEqual(API["dispatch"]("status", self.server)["current"], "releases/cb8e896")
 
-    def test_real_rsync_upload_and_repeat(self):
+
+    def archive(self, source):
+        archive = self.root / "artifact.zip"
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
+            for path in source.rglob("*"):
+                if path.is_file():
+                    package.write(path, path.relative_to(source))
+        return archive
+
+    def test_real_zip_stage_and_repeat(self):
         source = self.fixture(self.root / "source", A)
         API["seal"](source, A)
-        API["dispatch"]("prepare " + A, self.server)
-        shell = shlex.join([sys.executable, str(SCRIPT), "--receiver", str(self.root)])
-        command = ["/usr/bin/rsync", "-az", "--delete", "--safe-links", "-e", shell, str(source) + "/", "fixture:" + A + "/"]
+        archive = self.archive(source)
         for _ in range(2):
-            result = subprocess.run(command, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            with self.server.lock():
+                self.server.install_archive(archive, A)
             self.assertEqual(API["verify"](self.root / "incoming" / A, A)["commit"], A)
         self.activate()
         self.assertEqual(os.readlink(self.root / "current"), "releases/" + A)
@@ -258,6 +261,7 @@ class DeploymentChecks(unittest.TestCase):
     def test_client_verifies_then_deploys_without_resealing(self):
         source = self.fixture(self.root / "source", A)
         API["seal"](source, A)
+        archive = self.archive(source)
         binary = self.root / "bin"
         binary.mkdir()
         ssh = binary / "ssh"
@@ -265,13 +269,21 @@ class DeploymentChecks(unittest.TestCase):
         ssh.chmod(0o755)
         env = dict(os.environ, PATH=str(binary) + os.pathsep + os.environ["PATH"])
         command = ["bash", str(SCRIPT.with_name("deploy.sh")), str(source), A, "fixture"]
-        result = subprocess.run(command, env=env, capture_output=True, text=True)
+        result = subprocess.run(command, input=str(archive) + "\n", env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(os.readlink(self.root / "current"), "releases/" + A)
+        self.assertEqual((self.root / "ssh-audit").read_text().splitlines(), ["fetch " + A, "activate " + A])
+        self.assertIn("Fetching validated artifact for release " + A, result.stdout)
+        self.assertIn("Activating and checking release " + A, result.stdout)
+        archive.write_bytes(b"corrupt transport archive")
+        result = subprocess.run(command, input=str(archive) + "\n", env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.root / "ssh-audit").read_text().splitlines(), ["fetch " + A, "activate " + A, "fetch " + A])
+        self.assertNotIn("Activating and checking", result.stdout)
         before = (source / "release.json").read_bytes()
         audit = (self.root / "ssh-audit").read_text()
         (source / "assets/main.js").write_text("corrupt after CI seal")
-        result = subprocess.run(command, env=env, capture_output=True, text=True)
+        result = subprocess.run(command, input=str(archive) + "\n", env=env, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((source / "release.json").read_bytes(), before)
         self.assertEqual((self.root / "ssh-audit").read_text(), audit)
@@ -296,4 +308,6 @@ class DeploymentChecks(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    # Keep the existing CI entrypoint covering the new transport as well.
+    from test_artifact import ArtifactChecks
     unittest.main()
