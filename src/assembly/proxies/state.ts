@@ -1,6 +1,7 @@
 import { can } from '@/assembly/backend'
 import { useStorage } from '@/composables/use-storage'
 import { NOT_CONNECTED, PROXY_TYPE, TEST_URL } from '@/constant'
+import { probeLatency } from '@/helper/probe'
 import { groupTestUrls, independentLatencyTest, speedtestUrl } from '@/store/settings'
 import type { Proxy, ProxyProvider } from '@/types'
 import { last } from 'lodash'
@@ -94,10 +95,12 @@ export const latencyMapOf = (groupName?: MaybeRefOrGetter<string | undefined>) =
     const name = toValue(groupName)
     const group = name ? proxyMap.value[name] : undefined
     if (group?.probe) {
-      return new Map((group.all ?? []).map((tag) => {
-        const report = group.probe!.reports[tag]
-        return [tag, report?.ok ? Math.max(1, report.firstByteMs) : NOT_CONNECTED]
-      }))
+      return new Map(
+        (group.all ?? []).map((tag) => [
+          tag,
+          probeLatency(group.probe!.reports[tag]) || NOT_CONNECTED,
+        ]),
+      )
     }
     return getLatencyMap(getTestUrlBucket(name)).value
   })
@@ -105,8 +108,7 @@ export const latencyMapOf = (groupName?: MaybeRefOrGetter<string | undefined>) =
 export const getLatencyByName = (proxyName: string, groupName?: string) => {
   const probe = groupName ? proxyMap.value[groupName]?.probe : undefined
   if (probe) {
-    const report = probe.reports[proxyName]
-    return report?.ok ? Math.max(1, report.firstByteMs) : NOT_CONNECTED
+    return probeLatency(probe.reports[proxyName]) || NOT_CONNECTED
   }
   return getLatencyMap(getTestUrlBucket(groupName)).value.get(proxyName) ?? NOT_CONNECTED
 }

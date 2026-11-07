@@ -76,12 +76,12 @@ try {
   await nodeHas(GROUPS[0], NODES[0], 'Passed')
   await nodeHas(GROUPS[1], NODES[0], 'Passed')
   await nodeHas(GROUPS[2], NODES[0], 'Disqualified')
-  await nodeHas(GROUPS[3], NODES[0], 'Not checked')
+  await nodeHas(GROUPS[3], NODES[0], 'Not eligible')
   await nodeHas(GROUPS[3], NODES[1], 'Passed')
   assert.equal(fixture.group(GROUPS[2]).items.find((item) => item.tag === NODES[0]).probe.ok, false)
   assert.ok(fixture.group(GROUPS[2]).items.find((item) => item.tag === NODES[0]).probe.error)
-  assert.equal(fixture.group(GROUPS[3]).items.find((item) => item.tag === NODES[0]).probe, undefined)
-  console.log('✓ Real core reports: same node passed / explicitly failed / unchecked in separate groups')
+  assert.equal(fixture.group(GROUPS[3]).items.find((item) => item.tag === NODES[0]).probe.eligible, false)
+  console.log('✓ Real core reports: same node passed / explicitly failed / not eligible in separate groups')
 
   const current = fixture.group(GROUPS[0]).selected
   assert.ok(NODES.includes(current))
@@ -104,7 +104,7 @@ try {
   await until('passing current member stays selected in UI', async () => (await readNode(GROUPS[0], current))?.active)
   await nodeHas(GROUPS[1], NODES[0], 'Passed')
   await nodeHas(GROUPS[2], NODES[0], 'Disqualified')
-  await nodeHas(GROUPS[3], NODES[0], 'Not checked')
+  await nodeHas(GROUPS[3], NODES[0], 'Not eligible')
   console.log('✓ Rescreen: running → greater completed generation; passing current member retained')
 
   await click('[role="tab"][data-value="proxyProvider"]')

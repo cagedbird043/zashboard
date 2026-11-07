@@ -26,8 +26,8 @@ Browser support
 
 连接时选择 **sing-box**，填写核心的 API 地址与 secret。常驻状态订阅使用 WebSocket，一元操作使用 gRPC-Web。页面仅为静态资源，直接由浏览器连接目标核心，托管服务器不保存 API secret 或订阅链接。
 
-- **probe**：显示每个组成员的首字节时间、传输比值及合格状态，点击结果查看传输时间、检测时间或失败原因。`prefer_order` 跳过的成员显示“未检测”。
-- **重新筛选**：触发 node-probe service 的共享完整筛选，不是 urltest；合格判定、排名和切换由所连接核心的策略决定。筛选开始与结束由核心推送，离线、暂停或失败会显示错误。
+- **probe**：显示每个组成员的判定（合格、淘汰、冷却中、不参选、未检测），合格成员附主测量的总耗时中位数和吞吐；点击查看失败的 qualify 子句、得分、各测量统计和真实连接失败率。分组按钮的提示列出策略名和生效的表达式。
+- **重新筛选**：触发该组所用策略的一次筛选，不是 urltest；合格判定、排名和切换由核心配置中的策略表达式决定。筛选开始与结束由核心推送，离线、暂停或失败会显示错误。
 - **订阅提供商**：使用我们核心的 `daemon.ProviderService`，显示节点、流量、到期时间与更新时间，支持刷新和健康检查。完整订阅链接默认隐藏，可主动查看或复制。
 
 probe 结果与订阅链接需要支持相应 API 字段的 cagedbird 核心。旧核心不支持时不会把普通延迟伪装成 probe 结果；上游核心没有 ProviderService 时不显示订阅页。订阅链接可能含凭据，请保护 API secret，并避免在截图中展示链接。
@@ -47,7 +47,7 @@ probe 结果与订阅链接需要支持相应 API 字段的 cagedbird 核心。�
 
 推送到 `singbox`、`cagedbird/candidate-*`，或提交面向 `singbox` 的 PR 时运行 **Cagedbird CI**，也可手动运行。自动上游候选由同步工作流直接调用同一套 CI，避免重复触发。使用 Node.js 24 和 `packageManager` 锁定的 pnpm，冻结安装依赖，执行类型检查、只读 ESLint、生产构建，以及真实 headless Chrome 的代理行为、自动连接与折叠生命周期验收。浏览器固定为英语，保留浏览器沙箱。
 
-原生验收使用 [`scripts/ci/sing-box-release.json`](scripts/ci/sing-box-release.json) 固定的 cagedbird 核心及 SHA256，隔离启动本地核心与 HTTP 订阅，不访问真实客户端。覆盖 probe 筛选生命周期、成功/失败/未测结果隔离、合格节点保留，以及订阅链接遮蔽、复制和刷新后的节点与用量变化。
+原生验收使用 [`scripts/ci/sing-box-release.json`](scripts/ci/sing-box-release.json) 固定的 cagedbird 核心及 SHA256，隔离启动本地核心与 HTTP 订阅，不访问真实客户端。覆盖 probe 筛选生命周期、合格/淘汰/不参选结果按组隔离、合格节点保留，以及订阅链接遮蔽、复制和刷新后的节点与用量变化。
 
 CI 构建全部七种字体变体，完整性清单和提交 SHA 随产物保存在 Actions artifacts 14 天。`singbox` 通过全部检查后自动部署其中的 all-fonts 产物；候选、PR 不部署。`cagedbird-release.yml` 仍仅允许显式手动触发 GitHub Release；原作者工作流保持不变。
 

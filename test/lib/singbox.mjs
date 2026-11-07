@@ -84,16 +84,32 @@ export const startSingbox = async () => {
       providers: [{ type: 'remote', tag: PROVIDER, url: subscriptionURL, http_client: 'subscription-http', update_interval: '24h' }],
       outbounds: [
         ...NODES.map((tag) => ({ type: 'direct', tag })),
-        { type: 'probe', tag: GROUPS[0], probe: 'ci-probe', outbounds: NODES },
-        { type: 'probe', tag: GROUPS[1], probe: 'ci-probe', outbounds: NODES, url: `${origin}/request` },
-        { type: 'probe', tag: GROUPS[2], probe: 'ci-probe', outbounds: NODES, url: `http://127.0.0.1:${failedPort}/unreachable` },
-        { type: 'probe', tag: GROUPS[3], probe: 'ci-probe', outbounds: [NODES[1], NODES[0]], url: `${origin}/ordered`, prefer_order: true },
+        { type: 'probe', tag: GROUPS[0], probe: 'ci-probe', policy: 'bulk', outbounds: NODES },
+        { type: 'probe', tag: GROUPS[1], probe: 'ci-probe', policy: 'request', outbounds: NODES },
+        { type: 'probe', tag: GROUPS[2], probe: 'ci-probe', policy: 'unreachable', outbounds: NODES },
+        { type: 'probe', tag: GROUPS[3], probe: 'ci-probe', policy: 'ordered', outbounds: [NODES[1], NODES[0]] },
         { type: 'selector', tag: 'CI Subscription', providers: [PROVIDER] },
       ],
       route: { final: NODES[0] },
       services: [
         { type: 'api', tag: 'ci-api', listen: '127.0.0.1', listen_port: apiPort, access_control_allow_private_network: true },
-        { type: 'node-probe', tag: 'ci-probe', targets: [`${origin}/download`], domestic_url: `${origin}/domestic`, download_bytes: 131072, timeout: '5s', max_rtt_ratio: 4, screen_interval: '24h', check_interval: '24h' },
+        {
+          type: 'node-probe', tag: 'ci-probe',
+          domestic: { url: `${origin}/domestic`, bytes: 131072 },
+          measures: {
+            bulk: { kind: 'download', targets: [`${origin}/download`], bytes: 131072, timeout: '5s' },
+            request: { kind: 'request', targets: [`${origin}/request`], timeout: '5s' },
+            unreachable: { kind: 'request', targets: [`http://127.0.0.1:${failedPort}/unreachable`], timeout: '5s' },
+            ordered: { kind: 'request', targets: [`${origin}/ordered`], timeout: '5s' },
+          },
+          policies: {
+            bulk: { screen: { measures: ['bulk'], interval: '24h' }, qualify: 'm.bulk.last_ok', score: 'm.bulk.total.p50' },
+            request: { screen: { measures: ['request'], interval: '24h' }, qualify: 'm.request.last_ok', score: 'm.request.first_byte.p50' },
+            unreachable: { screen: { measures: ['unreachable'], interval: '24h' }, qualify: 'm.unreachable.last_ok' },
+            // Only the first member takes part, so the other shows as not eligible.
+            ordered: { screen: { measures: ['ordered'], interval: '24h' }, eligible: 'node.index == 0', qualify: 'm.ordered.last_ok' },
+          },
+        },
       ],
     }
     const configPath = join(directory, 'config.json')

@@ -6,13 +6,20 @@ import { getSingboxClient } from '@/api/singbox/client'
 import type { StreamHandle } from '@/api/singbox/streams'
 import { subscribeStream } from '@/api/singbox/subscriptions'
 import type { Group, GroupItem, Groups, OutboundList } from '@/gen/daemon/started_service_pb'
+import { probeLatency } from '@/helper/probe'
+import { notifyRequestError } from '@/helper/request-error'
 import { iconReflectList, speedtestTimeout } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Proxy } from '@/types'
 import type { ProxiesDriver, ProxiesPayload } from '../driver/types'
 import { isLatencyTestable, proxyGroupList, proxyMap, proxyProviederList } from '../proxies/state'
-import { nativeProviders, startProviders, resetProviders, refreshProvider, healthCheckProvider } from './providers'
-import { notifyRequestError } from '@/helper/request-error'
+import {
+  healthCheckProvider,
+  nativeProviders,
+  refreshProvider,
+  resetProviders,
+  startProviders,
+} from './providers'
 
 const getHistoryFromItem = (item: GroupItem): Proxy['history'] =>
   item.urlTestDelay > 0
@@ -229,10 +236,14 @@ const buildPayload = (): ProxiesPayload => {
       now: group.selected,
       all: group.items.map((i) => i.tag),
       selectable: group.selectable,
-      probe: group.probe ? {
-        ...group.probe,
-        reports: Object.fromEntries(group.items.filter((item) => item.probe).map((item) => [item.tag, item.probe!])),
-      } : undefined,
+      probe: group.probe
+        ? {
+            ...group.probe,
+            reports: Object.fromEntries(
+              group.items.filter((item) => item.probe).map((item) => [item.tag, item.probe!]),
+            ),
+          }
+        : undefined,
       history: [],
       extra: {},
       icon: '',
@@ -311,23 +322,27 @@ const ensureSession = () => {
     activeBackend.value?.type === 'singbox' && activeBackend.value.uuid === sessionKey
 
   handles = [
-    subscribeStream<Groups>('groups', (msg) => {
-      if (!alive()) {
-        stop()
-        return
-      }
-      groups = new Map()
-      for (const g of msg.group) groups.set(g.tag, g)
-      applyPayload()
-      if (!resolved) {
-        resolved = true
-        resolveReady()
-      }
-      // URLTest RPC 只负责启动任务；历史记录更新后，结果才会通过订阅推送。
-      // 这里按各次测速的目标指纹结算，别让无关推送把等待提前唤醒。
-      settleURLTestWaiters()
-      settleProbeWaiters()
-    }, () => rejectProbeWaiters(new Error('Probe subscription disconnected'))),
+    subscribeStream<Groups>(
+      'groups',
+      (msg) => {
+        if (!alive()) {
+          stop()
+          return
+        }
+        groups = new Map()
+        for (const g of msg.group) groups.set(g.tag, g)
+        applyPayload()
+        if (!resolved) {
+          resolved = true
+          resolveReady()
+        }
+        // URLTest RPC 只负责启动任务；历史记录更新后，结果才会通过订阅推送。
+        // 这里按各次测速的目标指纹结算，别让无关推送把等待提前唤醒。
+        settleURLTestWaiters()
+        settleProbeWaiters()
+      },
+      () => rejectProbeWaiters(new Error('Probe subscription disconnected')),
+    ),
     subscribeStream<OutboundList>('outbounds', (msg) => {
       if (!alive()) {
         stop()
@@ -450,9 +465,7 @@ export const proxiesDriver: ProxiesDriver = {
 
     const result: Record<string, number> = {}
     for (const item of groups.get(group)?.items ?? []) {
-      result[item.tag] = groups.get(group)?.probe
-        ? (item.probe?.ok ? Math.max(1, item.probe.firstByteMs) : 0)
-        : item.urlTestDelay
+      result[item.tag] = groups.get(group)?.probe ? probeLatency(item.probe) : item.urlTestDelay
     }
 
     return result

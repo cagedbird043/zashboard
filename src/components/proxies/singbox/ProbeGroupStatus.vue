@@ -7,7 +7,10 @@
     @click.stop="emit('screen')"
     @mouseenter="showDetails"
   >
-    <span v-if="busy" class="loading loading-spinner loading-xs" />
+    <span
+      v-if="busy"
+      class="loading loading-spinner loading-xs"
+    />
     {{ !probe ? t('probeUnsupported') : busy ? t('probeScreening') : t('probeRescreen') }}
   </button>
 </template>
@@ -15,6 +18,7 @@
 <script setup lang="ts">
 import { proxyMap } from '@/assembly/proxies'
 import { useTooltip } from '@/composables/use-tooltip'
+import { formatTime } from '@/helper/probe'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -27,8 +31,11 @@ const busy = computed(() => props.loading || probe.value?.running)
 const showDetails = (event: Event) => {
   if (!probe.value) return showTip(event, t('probeUnsupported'))
   const info = probe.value
-  const lines = [info.url || `${t('probeRatio')}: ≤ ${info.maxRTTRatio}`, t('probeKeepCurrent')]
-  if (info.screenedAt > 0n) lines.push(`${t('probeLastScreen')}: ${new Date(Number(info.screenedAt)).toLocaleString()}`)
+  const lines = [`${t('probePolicy')}: ${info.policy}`]
+  for (const expression of info.expressions) lines.push(`${expression.name}: ${expression.source}`)
+  if (info.screenedAt > 0n) lines.push(`${t('probeLastScreen')}: ${formatTime(info.screenedAt)}`)
+  if (info.selectedAt > 0n) lines.push(`${t('probeSelectedAt')}: ${formatTime(info.selectedAt)}`)
+  if (info.switchReason) lines.push(`${t('probeSwitchReason')}: ${info.switchReason}`)
   if (info.error) lines.push(info.error)
   showTip(event, lines.join('\n'), { allowHTML: false })
 }
