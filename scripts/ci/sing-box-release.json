@@ -1,7 +1,7 @@
 {
-  "version": "1.15.0-alpha.13-cagedbird.20261106023555.af87b1a7d",
-  "tag": "v1.15.0-alpha.13-cagedbird.20261106023555.af87b1a7d",
-  "commit": "af87b1a7d67cbb880e22bc89477efe75976bfaf2",
-  "url": "https://github.com/cagedbird043/sing-box/releases/download/v1.15.0-alpha.13-cagedbird.20261106023555.af87b1a7d/sing-box-cagedbird-linux-amd64.tar.gz",
-  "sha256": "00465bfc64e0c8c480ed4498bb7ba6837d95e93d1f13b14d029ebe5468b1107f"
+  "version": "1.15.0-alpha.13-cagedbird.20261107124353.70cbde848",
+  "tag": "v1.15.0-alpha.13-cagedbird.20261107124353.70cbde848",
+  "commit": "70cbde848110b1589372a3f0185ea15a825c8e7d",
+  "url": "https://github.com/cagedbird043/sing-box/releases/download/v1.15.0-alpha.13-cagedbird.20261107124353.70cbde848/sing-box-cagedbird-linux-amd64.tar.gz",
+  "sha256": "544eab3813d501ddbdc0d8eaf69b6466939cedbbc829bcaebe3465cc09de11eb"
 }
